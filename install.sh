@@ -5,6 +5,11 @@ REPO="https://api.github.com/repos/itdoginfo/podkop/releases/latest"
 DOWNLOAD_DIR="/tmp/podkop"
 COUNT=3
 
+# This fork ships with the extended sing-box build instead of the stock feed one.
+# https://github.com/EikeiDev/OpenWRT-sing-box-extended
+SING_BOX_EXTENDED_INSTALLER_URL="https://raw.githubusercontent.com/EikeiDev/OpenWRT-sing-box-extended/refs/heads/main/install.sh"
+SING_BOX_REQUIRED_VERSION="1.12.0"
+
 # Cached flag to switch between ipk or apk package managers
 PKG_IS_APK=0
 command -v apk >/dev/null 2>&1 && PKG_IS_APK=1
@@ -291,20 +296,50 @@ check_system() {
     fi
 }
 
-sing_box() {
+install_sing_box_extended() {
+    local installer="/tmp/sing-box-extended-install.sh"
+
+    msg "Installing the extended sing-box build (EikeiDev/OpenWRT-sing-box-extended)..."
+    if ! wget -qO "$installer" "$SING_BOX_EXTENDED_INSTALLER_URL"; then
+        msg "Failed to download the sing-box-extended installer from:"
+        msg "  $SING_BOX_EXTENDED_INSTALLER_URL"
+        msg "Install the extended sing-box manually, then re-run this script."
+        exit 1
+    fi
+
+    # The upstream installer is interactive: it asks which sing-box-extended
+    # release to install. Since podkop's install.sh is run interactively, we run
+    # it in the foreground so the user can pick a version.
+    sh "$installer"
+    rm -f "$installer"
+
     if ! pkg_is_installed "^sing-box"; then
-        return
+        msg "sing-box was not installed by the extended installer. Aborting."
+        exit 1
     fi
+}
 
-    sing_box_version=$(sing-box version | head -n 1 | awk '{print $3}')
-    required_version="1.12.4"
+sing_box() {
+    # podkop uses the extended sing-box build. Keep an already installed sing-box
+    # if it satisfies the required version (this also keeps a previously installed
+    # extended build); otherwise install the extended build.
+    if pkg_is_installed "^sing-box"; then
+        sing_box_version=$(sing-box version | head -n 1 | awk '{print $3}')
 
-    if [ "$(printf '%s\n%s\n' "$sing_box_version" "$required_version" | sort -V | head -n 1)" != "$required_version" ]; then
-        msg "sing-box version $sing_box_version is older than the required version $required_version."
-        msg "Removing old version..."
-        service podkop stop
+        if [ "$(printf '%s\n%s\n' "$sing_box_version" "$SING_BOX_REQUIRED_VERSION" | sort -V | head -n 1)" = "$SING_BOX_REQUIRED_VERSION" ]; then
+            msg "sing-box $sing_box_version is already installed (>= $SING_BOX_REQUIRED_VERSION), keeping it."
+            return
+        fi
+
+        msg "sing-box version $sing_box_version is older than the required version $SING_BOX_REQUIRED_VERSION."
+        msg "Replacing it with the extended build..."
+        service podkop stop 2>/dev/null
         pkg_remove sing-box
+    else
+        msg "sing-box is not installed."
     fi
+
+    install_sing_box_extended
 }
 
 main

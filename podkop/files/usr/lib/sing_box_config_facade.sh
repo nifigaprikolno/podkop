@@ -333,3 +333,34 @@ sing_box_cf_add_single_key_reject_rule() {
 
     echo "$config"
 }
+
+# Add a route rule that forces traffic matching a single key/value straight to the
+# direct outbound. Mirrors sing_box_cf_add_single_key_reject_rule, but routes to
+# SB_DIRECT_OUTBOUND_TAG instead of rejecting. Used for e.g. protocol=bittorrent → direct.
+sing_box_cf_add_single_key_direct_rule() {
+    local config="$1"
+    local inbound="$2"
+    local key="$3"
+    local value="$4"
+
+    tag="$(gen_id)"
+    config=$(sing_box_cm_add_route_rule "$config" "$tag" "$inbound" "$SB_DIRECT_OUTBOUND_TAG")
+    config=$(sing_box_cm_patch_route_rule "$config" "$tag" "$key" "$value")
+
+    echo "$config"
+}
+
+# Add a route rule that forces the given domain suffixes straight to the direct
+# outbound. The suffixes value must be a JSON array (e.g. '[".ru",".su"]').
+# Used for the "direct Russian zones" feature (.ru / .su / .рф → direct).
+sing_box_cf_add_domain_suffix_direct_rule() {
+    local config="$1"
+    local inbound="$2"
+    local suffixes_json_array="$3"
+
+    tag="$(gen_id)"
+    config=$(sing_box_cm_add_route_rule "$config" "$tag" "$inbound" "$SB_DIRECT_OUTBOUND_TAG")
+    config=$(sing_box_cm_patch_route_rule "$config" "$tag" "domain_suffix" "$suffixes_json_array")
+
+    echo "$config"
+}

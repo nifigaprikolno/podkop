@@ -50,6 +50,11 @@ SB_EXCLUSION_RULE_TAG="exclusion-rule-tag"
 # Experimental
 SB_CLASH_API_CONTROLLER_PORT=9090
 
+## Direct Russian domain zones (.ru / .su / .рф). '.xn--p1ai' is the punycode form
+## of '.рф' (sing-box domain_suffix and the domain validator accept ASCII only).
+## Used when settings.direct_ru_zones is enabled to force these zones straight out.
+DIRECT_RU_ZONE_SUFFIXES='[".ru",".su",".xn--p1ai"]'
+
 ## Lists
 GITHUB_RAW_URL="https://raw.githubusercontent.com/itdoginfo/allow-domains/main"
 SRS_MAIN_URL="https://github.com/itdoginfo/allow-domains/releases/latest/download"

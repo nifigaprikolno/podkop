@@ -1,6 +1,8 @@
 "use strict";
 "require form";
 "require uci";
+"require fs";
+"require ui";
 "require baseclass";
 "require tools.widgets as widgets";
 "require view.podkop.main as main";
@@ -271,6 +273,28 @@ function createSettingsContent(section) {
   o.rmempty = false;
 
   o = section.option(
+    form.Flag,
+    "p2p_direct",
+    _("P2P (BitTorrent) Direct"),
+    _(
+      "Route P2P/BitTorrent traffic directly, never through the tunnel (detected by sing-box sniffing)",
+    ),
+  );
+  o.default = "1";
+  o.rmempty = false;
+
+  o = section.option(
+    form.Flag,
+    "direct_ru_zones",
+    _("Direct Russian Zones (.ru/.su/.рф)"),
+    _(
+      "Always route the .ru, .su and .рф domain zones directly, even if a domain also appears in a community list",
+    ),
+  );
+  o.default = "1";
+  o.rmempty = false;
+
+  o = section.option(
     form.ListValue,
     "update_interval",
     _("List Update Frequency"),
@@ -428,6 +452,71 @@ function createSettingsContent(section) {
     }
 
     return validation.message;
+  };
+
+  // --- Remote management from a VPS panel (podkop-server) ---
+  // Only the panel URL and the client key/token live on the router; the panel
+  // decides the proxy key, community lists, zones and DNS and ships them as a
+  // profile that podkop caches and applies.
+  o = section.option(
+    form.Flag,
+    "remote_config_enabled",
+    _("Manage from VPS panel"),
+    _(
+      "Receive the proxy key and route settings from a central VPS panel. The panel issues keys and pushes route profiles; the router only stores and caches them.",
+    ),
+  );
+  o.default = "0";
+  o.rmempty = false;
+
+  o = section.option(
+    form.Value,
+    "remote_config_url",
+    _("VPS Panel URL"),
+    _("Base URL of the podkop-server panel, e.g. https://panel.example.com"),
+  );
+  o.depends("remote_config_enabled", "1");
+  o.placeholder = "https://panel.example.com";
+  o.rmempty = true;
+  o.validate = function (section_id, value) {
+    if (!value || value.length === 0) {
+      return true;
+    }
+    if (!/^https?:\/\/.+/.test(value)) {
+      return _("URL must start with http:// or https://");
+    }
+    return true;
+  };
+
+  o = section.option(
+    form.Value,
+    "remote_config_token",
+    _("Client Key / Token"),
+    _("The key issued to this router by the VPS panel"),
+  );
+  o.depends("remote_config_enabled", "1");
+  o.password = true;
+  o.rmempty = true;
+
+  o = section.option(form.Button, "_remote_config_apply", _("Route Profile"));
+  o.depends("remote_config_enabled", "1");
+  o.inputtitle = _("Apply profile now");
+  o.inputstyle = "apply";
+  o.onclick = function () {
+    ui.addNotification(null, E("p", {}, _("Fetching route profile from the VPS panel...")), "info");
+    return fs
+      .exec("/usr/bin/podkop", ["remote_config_update"])
+      .then(function (res) {
+        const out = (res && (res.stdout || res.stderr)) || "";
+        if (res && res.code === 0) {
+          ui.addNotification(null, E("p", {}, _("Route profile applied") + (out ? ": " + out : "")), "info");
+        } else {
+          ui.addNotification(null, E("p", {}, _("Failed to apply route profile") + (out ? ": " + out : "")), "error");
+        }
+      })
+      .catch(function (err) {
+        ui.addNotification(null, E("p", {}, _("Failed to apply route profile: ") + err), "error");
+      });
   };
 }
 

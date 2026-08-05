@@ -140,6 +140,18 @@ msgstr "Отключить QUIC"
 msgid "Disable the QUIC protocol to improve compatibility or fix issues with video streaming"
 msgstr "Отключить QUIC протокол для улучшения совместимости или исправления видео стриминга"
 
+msgid "P2P (BitTorrent) Direct"
+msgstr "P2P (BitTorrent) напрямую"
+
+msgid "Route P2P/BitTorrent traffic directly, never through the tunnel (detected by sing-box sniffing)"
+msgstr "Направлять P2P/BitTorrent-трафик напрямую, минуя тоннель (определяется сниффингом sing-box)"
+
+msgid "Direct Russian Zones (.ru/.su/.рф)"
+msgstr "Прямые зоны РФ (.ru/.su/.рф)"
+
+msgid "Always route the .ru, .su and .рф domain zones directly, even if a domain also appears in a community list"
+msgstr "Всегда направлять зоны .ru, .su и .рф напрямую, даже если домен присутствует в community-списке"
+
 msgid "Disabled"
 msgstr "Отключено"
 
@@ -793,3 +805,42 @@ msgstr "Секретный ключ YACD"
 
 msgid "You can select Output Network Interface, by default autodetect"
 msgstr "Вы можете выбрать выходной сетевой интерфейс, по умолчанию он определяется автоматически."
+
+msgid "Manage from VPS panel"
+msgstr "Управление с VPS-панели"
+
+msgid "Receive the proxy key and route settings from a central VPS panel. The panel issues keys and pushes route profiles; the router only stores and caches them."
+msgstr "Получать ключ прокси и настройки маршрутов с центральной VPS-панели. Панель выдаёт ключи и рассылает профили маршрутов; роутер только хранит и кэширует их."
+
+msgid "VPS Panel URL"
+msgstr "URL VPS-панели"
+
+msgid "Base URL of the podkop-server panel, e.g. https://panel.example.com"
+msgstr "Базовый URL панели podkop-server, напр. https://panel.example.com"
+
+msgid "URL must start with http:// or https://"
+msgstr "URL должен начинаться с http:// или https://"
+
+msgid "Client Key / Token"
+msgstr "Ключ / токен клиента"
+
+msgid "The key issued to this router by the VPS panel"
+msgstr "Ключ, выданный этому роутеру VPS-панелью"
+
+msgid "Route Profile"
+msgstr "Профиль маршрутов"
+
+msgid "Apply profile now"
+msgstr "Применить профиль сейчас"
+
+msgid "Fetching route profile from the VPS panel..."
+msgstr "Получение профиля маршрутов с VPS-панели..."
+
+msgid "Route profile applied"
+msgstr "Профиль маршрутов применён"
+
+msgid "Failed to apply route profile"
+msgstr "Не удалось применить профиль маршрутов"
+
+msgid "Failed to apply route profile: "
+msgstr "Не удалось применить профиль маршрутов: "

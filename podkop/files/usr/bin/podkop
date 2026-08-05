@@ -20,6 +20,7 @@ check_required_file "$PODKOP_LIB/sing_box_config_manager.sh"
 check_required_file "$PODKOP_LIB/sing_box_config_facade.sh"
 check_required_file "$PODKOP_LIB/logging.sh"
 check_required_file "$PODKOP_LIB/rulesets.sh"
+check_required_file "$PODKOP_LIB/remote_config.sh"
 . /lib/functions.sh
 . /lib/config/uci.sh
 . /lib/functions/network.sh
@@ -30,6 +31,7 @@ check_required_file "$PODKOP_LIB/rulesets.sh"
 . "$PODKOP_LIB/sing_box_config_facade.sh"
 . "$PODKOP_LIB/logging.sh"
 . "$PODKOP_LIB/rulesets.sh"
+. "$PODKOP_LIB/remote_config.sh"
 
 config_load "$PODKOP_CONFIG"
 
@@ -116,6 +118,10 @@ start_main() {
 
     config_foreach process_validate_service "section"
 
+    # Apply the last profile received from the VPS panel (cache only, no network),
+    # so the router starts with the server-managed settings even when offline.
+    remote_config_apply_cached
+
     br_netfilter_disable
 
     # Sync time for DoH/DoT
@@ -134,6 +140,7 @@ start_main() {
     # sing-box
     sing_box_init_config
     config_foreach add_cron_job "section"
+    add_remote_config_cron_job
     /etc/init.d/sing-box start
 
     log "Nice"
@@ -154,6 +161,7 @@ stop_main() {
     fi
 
     remove_cron_job
+    remove_remote_config_cron_job
 
     rm -f "$TMP_RULESET_FOLDER"/*
 
@@ -815,6 +823,24 @@ sing_box_configure_route() {
     config_get_bool disable_quic "settings" "disable_quic" 0
     if [ "$disable_quic" -eq 1 ]; then
         config=$(sing_box_cf_add_single_key_reject_rule "$config" "$SB_TPROXY_INBOUND_TAG" "protocol" "quic")
+    fi
+
+    # Send P2P (BitTorrent) traffic straight out, never through the tunnel. The
+    # rule is added before per-section rules so it wins by sing-box rule priority.
+    # BitTorrent is identified by the sniffer already enabled on the tproxy inbound.
+    local p2p_direct
+    config_get_bool p2p_direct "settings" "p2p_direct" 1
+    if [ "$p2p_direct" -eq 1 ]; then
+        config=$(sing_box_cf_add_single_key_direct_rule "$config" "$SB_TPROXY_INBOUND_TAG" "protocol" "bittorrent")
+    fi
+
+    # Russian domain zones (.ru / .su / .рф) always go direct. Added before the
+    # per-section rules so these zones stay direct even when a domain also appears
+    # in a community list such as russia_inside (matched via sniffed domain).
+    local direct_ru_zones
+    config_get_bool direct_ru_zones "settings" "direct_ru_zones" 1
+    if [ "$direct_ru_zones" -eq 1 ]; then
+        config=$(sing_box_cf_add_domain_suffix_direct_rule "$config" "$SB_TPROXY_INBOUND_TAG" "$DIRECT_RU_ZONE_SUFFIXES")
     fi
 
     local first_outbound_section
@@ -2669,6 +2695,7 @@ Available commands:
     restart                 Restart podkop service
     main                    Run main podkop process
     list_update             Update domain lists
+    remote_config_update    Fetch and apply the route profile from the VPS panel
     check_proxy             Check proxy connectivity
     check_nft               Check NFT rules
     check_nft_rules         Check NFT rules status
@@ -2708,6 +2735,9 @@ main)
     ;;
 list_update)
     list_update
+    ;;
+remote_config_update)
+    remote_config_update
     ;;
 check_proxy)
     check_proxy
