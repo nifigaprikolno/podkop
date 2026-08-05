@@ -1,0 +1,63 @@
+# podkop-server + 3x-UI + nginx.
+#
+# - nginx is the only publicly exposed service. It fronts everything with the
+#   decoy site; the operator panel lives on the secret PODKOP_SERVER_ADMIN_PATH.
+# - 3x-UI is reachable only on the internal docker network; podkop-server talks
+#   to its API to issue keys. It is NOT published to the host.
+#
+# Copy .env.example to .env and fill it in before `docker compose up -d`.
+
+services:
+  podkop-server:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      PODKOP_SERVER_LISTEN: ":8080"
+      PODKOP_SERVER_STORE: "/var/lib/podkop-server/store.json"
+      XUI_BASE_URL: "http://3x-ui:2053"
+    volumes:
+      - podkop_data:/var/lib/podkop-server
+    networks: [internal]
+    expose:
+      - "8080"
+
+  3x-ui:
+    image: ghcr.io/mhsanaei/3x-ui:latest
+    restart: unless-stopped
+    environment:
+      XRAY_VMESS_AEAD_FORCED: "false"
+    volumes:
+      - xui_db:/etc/x-ui
+      - xui_cert:/root/cert
+    networks: [internal]
+    # Xray inbound ports must be published so clients can connect. Adjust to the
+    # ports of the inbound you create in 3x-UI (e.g. 443 for VLESS-Reality).
+    ports:
+      - "443:443"
+    expose:
+      - "2053"
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    depends_on: [podkop-server]
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # Mount your TLS certs here and enable the 443 block in nginx.conf.
+      - ./certs:/etc/nginx/certs:ro
+    ports:
+      - "80:80"
+      - "8443:443"
+    networks: [internal]
+
+volumes:
+  podkop_data:
+  xui_db:
+  xui_cert:
+
+networks:
+  internal:
+    driver: bridge

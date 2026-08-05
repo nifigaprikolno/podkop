@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>4PDA — Вход</title>
+<style>
+  :root{ --orange:#ff7000; --orange-d:#e35f00; --bg:#e9eaec; --card:#ffffff; --ink:#2b2b2b; --muted:#8a8f98; --line:#d7d9dd; }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Arial,Helvetica,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink);font-size:14px}
+  a{color:var(--orange-d);text-decoration:none}
+  a:hover{text-decoration:underline}
+  header{background:#2b2b2b;color:#fff}
+  .topbar{max-width:1000px;margin:0 auto;display:flex;align-items:center;height:52px;padding:0 16px;gap:22px}
+  .logo{font-weight:900;font-size:26px;letter-spacing:-1px;color:#fff}
+  .logo b{color:var(--orange)}
+  nav{display:flex;gap:18px;font-size:14px}
+  nav a{color:#cfd2d6}
+  nav a:hover{color:#fff;text-decoration:none}
+  .searchspot{margin-left:auto;color:#9a9ea3}
+  .wrap{max-width:1000px;margin:0 auto;padding:28px 16px}
+  .breadcrumbs{color:var(--muted);font-size:12px;margin-bottom:16px}
+  .login-card{background:var(--card);max-width:420px;margin:14px auto;border:1px solid var(--line);border-radius:4px;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+  .login-head{background:linear-gradient(#fbfbfc,#f1f2f4);border-bottom:1px solid var(--line);padding:14px 20px;font-size:17px;font-weight:700}
+  .login-body{padding:22px 20px}
+  label{display:block;font-size:13px;color:#555;margin:0 0 5px}
+  .field{margin-bottom:16px}
+  input[type=text],input[type=password]{width:100%;padding:9px 10px;border:1px solid #c7cad0;border-radius:3px;font-size:14px;background:#fff}
+  input[type=text]:focus,input[type=password]:focus{outline:none;border-color:var(--orange);box-shadow:0 0 0 2px rgba(255,112,0,.15)}
+  .row{display:flex;align-items:center;justify-content:space-between;margin:6px 0 18px}
+  .remember{display:flex;align-items:center;gap:8px;color:#555;font-size:13px}
+  .btn{width:100%;background:var(--orange);color:#fff;border:0;border-radius:3px;padding:11px;font-size:15px;font-weight:700;cursor:pointer}
+  .btn:hover{background:var(--orange-d)}
+  .sub{ text-align:center;margin-top:16px;font-size:13px;color:var(--muted)}
+  .error{background:#fdecec;border:1px solid #f5b5b5;color:#b23131;padding:10px 12px;border-radius:3px;font-size:13px;margin-bottom:16px}
+  footer{max-width:1000px;margin:24px auto 40px;padding:0 16px;color:var(--muted);font-size:12px;text-align:center}
+</style>
+</head>
+<body>
+<header>
+  <div class="topbar">
+    <div class="logo"><b>4</b>PDA</div>
+    <nav>
+      <a href="/">Форум</a>
+      <a href="/">Каталог</a>
+      <a href="/">Новости</a>
+      <a href="/">Игры</a>
+      <a href="/">Обзоры</a>
+    </nav>
+    <div class="searchspot">Поиск</div>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="breadcrumbs">Главная → Форум → Вход</div>
+
+  <div class="login-card">
+    <div class="login-head">Вход</div>
+    <div class="login-body">
+      {{if .Error}}<div class="error">{{.Error}}</div>{{end}}
+      <form method="post" action="/index.php?act=Login&amp;CODE=01" autocomplete="on">
+        <div class="field">
+          <label for="ips_username">Ваш ник или e-mail</label>
+          <input type="text" id="ips_username" name="ips_username" autocomplete="username">
+        </div>
+        <div class="field">
+          <label for="ips_password">Пароль</label>
+          <input type="password" id="ips_password" name="ips_password" autocomplete="current-password">
+        </div>
+        <div class="row">
+          <label class="remember"><input type="checkbox" name="rememberMe" value="1" checked> Оставаться в системе</label>
+          <a href="/">Забыли пароль?</a>
+        </div>
+        <button class="btn" type="submit">Войти</button>
+      </form>
+      <div class="sub">Нет аккаунта? <a href="/">Регистрация</a></div>
+    </div>
+  </div>
+</div>
+
+<footer>© 4PDA. Все права защищены.</footer>
+</body>
+</html>
