@@ -50,6 +50,19 @@ SB_EXCLUSION_RULE_TAG="exclusion-rule-tag"
 # Experimental
 SB_CLASH_API_CONTROLLER_PORT=9090
 
+## AmneziaWG (kernel module path: kmod-amneziawg + proto 'amneziawg')
+AWG_DEFAULT_INTERFACE="awg0"
+AWG_STATE_DIR="/etc/podkop"
+# Upstream package installer. Run with '-e -n' to install packages only, without
+# the interactive interface setup (podkop imports the .conf itself instead).
+AWG_INSTALLER_URL="https://raw.githubusercontent.com/Slava-Shchipunov/awg-openwrt/master/amneziawg-install.sh"
+# Obfuscation parameters of AmneziaWG 2.0, in .conf/UCI order. S3/S4 and I1-I5 are
+# 2.0 additions; H1-H4 became ranges ("123-456") in 2.0.
+AWG_OBFUSCATION_PARAMS="jc jmin jmax s1 s2 s3 s4 h1 h2 h3 h4 i1 i2 i3 i4 i5"
+# Removed in AmneziaWG 2.0 and unsupported by the kernel module — never emit these,
+# the interface would fail to come up.
+AWG_REMOVED_PARAMS="j1 j2 j3 itime"
+
 ## Direct Russian domain zones (.ru / .su / .рф). '.xn--p1ai' is the punycode form
 ## of '.рф' (sing-box domain_suffix and the domain validator accept ASCII only).
 ## Used when settings.direct_ru_zones is enabled to force these zones straight out.

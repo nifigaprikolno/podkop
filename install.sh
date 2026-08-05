@@ -213,6 +213,36 @@ main() {
     fi
 
     find "$DOWNLOAD_DIR" -type f -name '*podkop*' -exec rm {} \;
+
+    amneziawg
+}
+
+# Optional: AmneziaWG kernel packages. Only needed if you route through an
+# AmneziaWG tunnel (paste the .conf from the Amnezia VPN app into podkop).
+# Can also be done later from LuCI or with 'podkop awg_install'.
+amneziawg() {
+    if command -v awg >/dev/null 2>&1; then
+        msg "AmneziaWG packages are already installed"
+        return
+    fi
+
+    msg "Ставим пакеты AmneziaWG? y/n (Install AmneziaWG packages? Needed only for AmneziaWG tunnels)"
+    while true; do
+        read -r -p '' AWG
+        case $AWG in
+        y)
+            /usr/bin/podkop awg_install
+            break
+            ;;
+        n)
+            msg "Skipped. You can install them later: podkop awg_install"
+            break
+            ;;
+        *)
+            echo "Введите y или n"
+            ;;
+        esac
+    done
 }
 
 check_system() {

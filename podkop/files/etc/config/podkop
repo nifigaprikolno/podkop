@@ -44,3 +44,23 @@ config section 'main'
         #list fully_routed_ips '192.168.1.2'
         #option mixed_proxy_enabled '1'
         #option mixed_proxy_port '2080'
+
+# AmneziaWG tunnel (connection_type 'vpn'). With vpn_type 'amneziawg' podkop
+# imports the pasted .conf into /etc/config/network as a proto 'amneziawg'
+# interface (kmod-amneziawg required: run 'podkop awg_install') and routes
+# through it. With vpn_type 'interface' (default) podkop just uses an existing
+# interface that you configured yourself.
+#config section 'awg'
+#       option connection_type 'vpn'
+#       option vpn_type 'amneziawg'
+#       option awg_interface 'awg0'
+#       option awg_config '[Interface]
+#PrivateKey = ...
+#Address = 10.8.1.5/32
+#Jc = 4
+#...
+#[Peer]
+#PublicKey = ...
+#Endpoint = vpn.example.com:51820
+#AllowedIPs = 0.0.0.0/0'
+#       list community_lists 'russia_inside'

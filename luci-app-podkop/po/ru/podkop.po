@@ -844,3 +844,84 @@ msgstr "Не удалось применить профиль маршрутов
 
 msgid "Failed to apply route profile: "
 msgstr "Не удалось применить профиль маршрутов: "
+
+msgid "VPN Type"
+msgstr "Тип VPN"
+
+msgid "Use an interface you configured yourself, or let podkop set up AmneziaWG from a .conf"
+msgstr "Использовать уже настроенный вами интерфейс либо позволить podkop поднять AmneziaWG из .conf"
+
+msgid "Existing network interface"
+msgstr "Существующий сетевой интерфейс"
+
+msgid "AmneziaWG (import .conf)"
+msgstr "AmneziaWG (импорт .conf)"
+
+msgid "AmneziaWG Interface Name"
+msgstr "Имя интерфейса AmneziaWG"
+
+msgid "Name of the interface podkop creates from the config (default: awg0)"
+msgstr "Имя интерфейса, который podkop создаст из конфига (по умолчанию awg0)"
+
+msgid "Interface name may only contain letters, digits, '-' and '_' (max 15 chars)"
+msgstr "Имя интерфейса может содержать только буквы, цифры, '-' и '_' (не более 15 символов)"
+
+msgid "AmneziaWG Config (.conf)"
+msgstr "Конфиг AmneziaWG (.conf)"
+
+msgid "Paste the AmneziaWG client config. AmneziaWG 2.0 parameters (S3/S4, I1-I5, ranged H1-H4) are supported; J1-J3 and Itime were removed in 2.0 and are ignored."
+msgstr "Вставьте клиентский конфиг AmneziaWG. Параметры AmneziaWG 2.0 (S3/S4, I1-I5, диапазонные H1-H4) поддерживаются; J1-J3 и Itime удалены в 2.0 и игнорируются."
+
+msgid "AmneziaWG config cannot be empty"
+msgstr "Конфиг AmneziaWG не может быть пустым"
+
+msgid "Config must contain an [Interface] section"
+msgstr "Конфиг должен содержать секцию [Interface]"
+
+msgid "Config must contain a [Peer] section"
+msgstr "Конфиг должен содержать секцию [Peer]"
+
+msgid "Config must contain PrivateKey in the [Interface] section"
+msgstr "Конфиг должен содержать PrivateKey в секции [Interface]"
+
+msgid "Config must contain Address in the [Interface] section"
+msgstr "Конфиг должен содержать Address в секции [Interface]"
+
+msgid "Config must contain PublicKey in the [Peer] section"
+msgstr "Конфиг должен содержать PublicKey в секции [Peer]"
+
+msgid "Config must contain Endpoint in the [Peer] section"
+msgstr "Конфиг должен содержать Endpoint в секции [Peer]"
+
+msgid "AmneziaWG Packages"
+msgstr "Пакеты AmneziaWG"
+
+msgid "Installs kmod-amneziawg, amneziawg-tools and the LuCI protocol package"
+msgstr "Устанавливает kmod-amneziawg, amneziawg-tools и пакет протокола для LuCI"
+
+msgid "Install packages"
+msgstr "Установить пакеты"
+
+msgid "Installing AmneziaWG packages, this may take a while..."
+msgstr "Устанавливаем пакеты AmneziaWG, это может занять время..."
+
+msgid "AmneziaWG packages installed"
+msgstr "Пакеты AmneziaWG установлены"
+
+msgid "Failed to install AmneziaWG packages"
+msgstr "Не удалось установить пакеты AmneziaWG"
+
+msgid "AmneziaWG Interface"
+msgstr "Интерфейс AmneziaWG"
+
+msgid "Applies the saved config to the network interface. Save your changes first."
+msgstr "Применяет сохранённый конфиг к сетевому интерфейсу. Сначала сохраните изменения."
+
+msgid "Apply config now"
+msgstr "Применить конфиг сейчас"
+
+msgid "AmneziaWG config applied"
+msgstr "Конфиг AmneziaWG применён"
+
+msgid "Failed to apply AmneziaWG config"
+msgstr "Не удалось применить конфиг AmneziaWG"

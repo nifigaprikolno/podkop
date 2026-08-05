@@ -1,6 +1,7 @@
 "use strict";
 "require form";
 "require baseclass";
+"require fs";
 "require ui";
 "require tools.widgets as widgets";
 "require view.podkop.main as main";
@@ -203,12 +204,24 @@ function createSectionContent(section) {
   o.rmempty = false;
 
   o = section.option(
+    form.ListValue,
+    "vpn_type",
+    _("VPN Type"),
+    _("Use an interface you configured yourself, or let podkop set up AmneziaWG from a .conf"),
+  );
+  o.value("interface", _("Existing network interface"));
+  o.value("amneziawg", _("AmneziaWG (import .conf)"));
+  o.default = "interface";
+  o.depends("connection_type", "vpn");
+  o.rmempty = false;
+
+  o = section.option(
     widgets.DeviceSelect,
     "interface",
     _("Network Interface"),
     _("Select network interface for VPN connection"),
   );
-  o.depends("connection_type", "vpn");
+  o.depends({ connection_type: "vpn", vpn_type: "interface" });
   o.noaliases = true;
   o.nobridges = false;
   o.noinactive = false;
@@ -246,6 +259,116 @@ function createSectionContent(section) {
       type === "wifi" || type === "wireless" || type.includes("wlan");
 
     return !isWireless;
+  };
+
+  // --- AmneziaWG (podkop-managed, kernel module) ---
+  // podkop imports the .conf into /etc/config/network as a proto 'amneziawg'
+  // interface and routes through it. Requires kmod-amneziawg (see the button below).
+  o = section.option(
+    form.Value,
+    "awg_interface",
+    _("AmneziaWG Interface Name"),
+    _("Name of the interface podkop creates from the config (default: awg0)"),
+  );
+  o.depends({ connection_type: "vpn", vpn_type: "amneziawg" });
+  o.placeholder = "awg0";
+  o.default = "awg0";
+  o.rmempty = false;
+  o.validate = function (section_id, value) {
+    if (!value || value.length === 0) {
+      return true;
+    }
+    if (!/^[a-zA-Z0-9_-]{1,15}$/.test(value)) {
+      return _("Interface name may only contain letters, digits, '-' and '_' (max 15 chars)");
+    }
+    return true;
+  };
+
+  o = section.option(
+    form.TextValue,
+    "awg_config",
+    _("AmneziaWG Config (.conf)"),
+    _("Paste the AmneziaWG client config. AmneziaWG 2.0 parameters (S3/S4, I1-I5, ranged H1-H4) are supported; J1-J3 and Itime were removed in 2.0 and are ignored."),
+  );
+  o.depends({ connection_type: "vpn", vpn_type: "amneziawg" });
+  o.rows = 20;
+  o.rmempty = false;
+  o.validate = function (section_id, value) {
+    if (!value || value.trim().length === 0) {
+      return _("AmneziaWG config cannot be empty");
+    }
+
+    if (!/\[Interface\]/i.test(value)) {
+      return _("Config must contain an [Interface] section");
+    }
+    if (!/\[Peer\]/i.test(value)) {
+      return _("Config must contain a [Peer] section");
+    }
+    if (!/^\s*PrivateKey\s*=\s*\S+/im.test(value)) {
+      return _("Config must contain PrivateKey in the [Interface] section");
+    }
+    if (!/^\s*Address\s*=\s*\S+/im.test(value)) {
+      return _("Config must contain Address in the [Interface] section");
+    }
+    if (!/^\s*PublicKey\s*=\s*\S+/im.test(value)) {
+      return _("Config must contain PublicKey in the [Peer] section");
+    }
+    if (!/^\s*Endpoint\s*=\s*\S+/im.test(value)) {
+      return _("Config must contain Endpoint in the [Peer] section");
+    }
+
+    return true;
+  };
+
+  o = section.option(
+    form.Button,
+    "_awg_install",
+    _("AmneziaWG Packages"),
+    _("Installs kmod-amneziawg, amneziawg-tools and the LuCI protocol package"),
+  );
+  o.depends({ connection_type: "vpn", vpn_type: "amneziawg" });
+  o.inputtitle = _("Install packages");
+  o.inputstyle = "apply";
+  o.onclick = function () {
+    ui.addNotification(null, E("p", {}, _("Installing AmneziaWG packages, this may take a while...")), "info");
+    return fs
+      .exec("/usr/bin/podkop", ["awg_install"])
+      .then(function (res) {
+        const out = (res && (res.stdout || res.stderr)) || "";
+        ui.addNotification(
+          null,
+          E("p", {}, (res && res.code === 0 ? _("AmneziaWG packages installed") : _("Failed to install AmneziaWG packages")) + (out ? ": " + out : "")),
+          res && res.code === 0 ? "info" : "error",
+        );
+      })
+      .catch(function (err) {
+        ui.addNotification(null, E("p", {}, _("Failed to install AmneziaWG packages") + ": " + err), "error");
+      });
+  };
+
+  o = section.option(
+    form.Button,
+    "_awg_apply",
+    _("AmneziaWG Interface"),
+    _("Applies the saved config to the network interface. Save your changes first."),
+  );
+  o.depends({ connection_type: "vpn", vpn_type: "amneziawg" });
+  o.inputtitle = _("Apply config now");
+  o.inputstyle = "apply";
+  o.onclick = function () {
+    return fs
+      .exec("/usr/bin/podkop", ["awg_apply"])
+      .then(function (res) {
+        const out = (res && (res.stdout || res.stderr)) || "";
+        ui.addNotification(
+          null,
+          E("p", {}, (res && res.code === 0 ? _("AmneziaWG config applied") : _("Failed to apply AmneziaWG config")) + (out ? ": " + out : "")),
+          res && res.code === 0 ? "info" : "error",
+        );
+      })
+      .catch(function (err) {
+        ui.addNotification(null, E("p", {}, _("Failed to apply AmneziaWG config") + ": " + err), "error");
+      });
   };
 
   o = section.option(

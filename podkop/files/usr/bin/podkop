@@ -21,6 +21,7 @@ check_required_file "$PODKOP_LIB/sing_box_config_facade.sh"
 check_required_file "$PODKOP_LIB/logging.sh"
 check_required_file "$PODKOP_LIB/rulesets.sh"
 check_required_file "$PODKOP_LIB/remote_config.sh"
+check_required_file "$PODKOP_LIB/amneziawg.sh"
 . /lib/functions.sh
 . /lib/config/uci.sh
 . /lib/functions/network.sh
@@ -32,6 +33,7 @@ check_required_file "$PODKOP_LIB/remote_config.sh"
 . "$PODKOP_LIB/logging.sh"
 . "$PODKOP_LIB/rulesets.sh"
 . "$PODKOP_LIB/remote_config.sh"
+. "$PODKOP_LIB/amneziawg.sh"
 
 config_load "$PODKOP_CONFIG"
 
@@ -87,16 +89,17 @@ check_requirements() {
 
 _check_outbound_section() {
     local section="$1"
-    local proxy_string interface outbound_json urltest_proxy_links
+    local proxy_string interface outbound_json urltest_proxy_links awg_config
 
     config_get proxy_string "$section" "proxy_string"
     config_get selector_proxy_links "$section" "selector_proxy_links"
     config_get urltest_proxy_links "$section" "urltest_proxy_links"
     config_get outbound_json "$section" "outbound_json"
     config_get interface "$section" "interface"
+    config_get awg_config "$section" "awg_config"
 
     if [ -n "$proxy_string" ] || [ -n "$selector_proxy_links" ] || [ -n "$urltest_proxy_links" ] ||
-        [ -n "$outbound_json" ] || [ -n "$interface" ]; then
+        [ -n "$outbound_json" ] || [ -n "$interface" ] || [ -n "$awg_config" ]; then
         section_exists=0
     fi
 }
@@ -121,6 +124,10 @@ start_main() {
     # Apply the last profile received from the VPS panel (cache only, no network),
     # so the router starts with the server-managed settings even when offline.
     remote_config_apply_cached
+
+    # Bring up AmneziaWG interfaces for sections using vpn_type=amneziawg, so the
+    # interface exists before sing-box binds its outbound to it.
+    amneziawg_apply
 
     br_netfilter_disable
 
@@ -729,13 +736,20 @@ configure_outbound_handler() {
         ;;
     vpn)
         log "Configuring outbound in VPN connection type for the $section section"
-        local interface_name domain_resolver_enabled domain_resolver_dns_type domain_resolver_dns_server \
+        local interface_name vpn_type domain_resolver_enabled domain_resolver_dns_type domain_resolver_dns_server \
             domain_resolver_dns_server_address outbound_tag domain_resolver_tag dns_domain_resolver
 
         config_get interface_name "$section" "interface"
+        config_get vpn_type "$section" "vpn_type" "interface"
         config_get domain_resolver_enabled "$section" "domain_resolver_enabled"
         config_get domain_resolver_dns_type "$section" "domain_resolver_dns_type"
         config_get domain_resolver_dns_server "$section" "domain_resolver_dns_server"
+
+        # For podkop-managed AmneziaWG the interface is created from the .conf and
+        # named by its own option, so it is resolved separately.
+        if [ "$vpn_type" = "amneziawg" ]; then
+            config_get interface_name "$section" "awg_interface" "$AWG_DEFAULT_INTERFACE"
+        fi
 
         if [ -z "$interface_name" ]; then
             log "VPN interface is not set. Aborted." "fatal"
@@ -2696,6 +2710,9 @@ Available commands:
     main                    Run main podkop process
     list_update             Update domain lists
     remote_config_update    Fetch and apply the route profile from the VPS panel
+    awg_install             Install AmneziaWG packages (kmod, tools, LuCI proto)
+    awg_apply               Import the AmneziaWG .conf into the network interface
+    awg_status              Show AmneziaWG packages and interface status
     check_proxy             Check proxy connectivity
     check_nft               Check NFT rules
     check_nft_rules         Check NFT rules status
@@ -2738,6 +2755,15 @@ list_update)
     ;;
 remote_config_update)
     remote_config_update
+    ;;
+awg_install)
+    amneziawg_install_packages
+    ;;
+awg_apply)
+    amneziawg_apply
+    ;;
+awg_status)
+    amneziawg_status
     ;;
 check_proxy)
     check_proxy
