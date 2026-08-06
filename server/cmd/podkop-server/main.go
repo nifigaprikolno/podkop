@@ -1,12 +1,13 @@
 // Command podkop-server is the VPS-side management panel for podkop routers.
 // It issues keys (optionally via a companion 3x-UI panel), distributes route
-// profiles to routers over /api/v1/profile, and fronts everything with a decoy
-// site that camouflages the operator panel from active probing.
+// profiles to routers over /api/v1/profile, and serves the public Halogen
+// devlog that the operator area hides behind.
 package main
 
 import (
 	"context"
 	"errors"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -18,6 +19,13 @@ import (
 	"github.com/nifigaprikolno/podkop/server/internal/httpapi"
 	"github.com/nifigaprikolno/podkop/server/internal/store"
 	"github.com/nifigaprikolno/podkop/server/internal/xui"
+)
+
+// Build metadata, set with -ldflags "-X main.version=… -X main.commit=… -X main.date=…".
+var (
+	version = "dev"
+	commit  = ""
+	date    = ""
 )
 
 func main() {
@@ -35,6 +43,11 @@ func main() {
 	if _, err := st.EnsureDefaultProfile(); err != nil {
 		log.Fatalf("seed default profile: %v", err)
 	}
+	if cfg.Root == "site" {
+		if err := st.EnsureSeedPosts(); err != nil {
+			log.Fatalf("seed devlog posts: %v", err)
+		}
+	}
 
 	var xc *xui.Client
 	if cfg.XUIEnabled() {
@@ -51,6 +64,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("server: %v", err)
 	}
+	srv.SetBuildInfo(httpapi.BuildInfo{Version: version, Commit: commit, Date: date})
+
+	// Tee the log into the panel's ring buffer so the LOGS screen has something
+	// to show. Container stdout stays the source of truth.
+	log.SetOutput(io.MultiWriter(os.Stderr, srv.Events()))
 
 	httpServer := &http.Server{
 		Addr:              cfg.Listen,
@@ -59,7 +77,8 @@ func main() {
 	}
 
 	go func() {
-		log.Printf("podkop-server listening on %s (admin path %s)", cfg.Listen, cfg.AdminPath)
+		log.Printf("podkop-server %s listening on %s (root %q, admin path %s)",
+			version, cfg.Listen, cfg.Root, cfg.AdminPath)
 		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Fatalf("listen: %v", err)
 		}

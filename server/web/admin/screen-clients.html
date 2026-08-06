@@ -1,0 +1,113 @@
+{{define "screen-clients"}}
+<div class="toolbar">
+  <form method="get" action="{{.AdminPath}}clients">
+    <input name="q" value="{{.Query}}" placeholder="filter by name, token, profile, endpoint" style="min-width:260px">
+    <input type="hidden" name="filter" value="{{.Filter}}">
+    <button class="chip" type="submit">SEARCH</button>
+  </form>
+  <a class="chip{{if or (eq .Filter "") (eq .Filter "ALL")}} on{{end}}" href="{{.AdminPath}}clients?q={{.Query}}&filter=ALL">ALL</a>
+  <a class="chip{{if eq .Filter "ONLINE"}} on{{end}}" href="{{.AdminPath}}clients?q={{.Query}}&filter=ONLINE">ONLINE</a>
+  <a class="chip{{if eq .Filter "DRIFT"}} on{{end}}" href="{{.AdminPath}}clients?q={{.Query}}&filter=DRIFT">DRIFT</a>
+  <a class="chip{{if eq .Filter "PAUSED"}} on{{end}}" href="{{.AdminPath}}clients?q={{.Query}}&filter=PAUSED">PAUSED</a>
+</div>
+
+{{if .Created}}
+<div class="notice">
+  Key issued for <b>{{.Created.Name}}</b>. Put this token into the router:
+  <code>{{.Created.Token}}</code><br>
+  Subscription URL: <code>{{.Created.SubURL}}</code>
+</div>
+{{end}}
+
+<div class="plate scroll">
+  <table class="table">
+    <thead>
+      <tr>
+        <th>DEVICE</th><th>PROFILE · SOURCE</th><th>LAST SEEN</th><th>ADDED</th><th>STATE</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {{range .Clients}}
+      <tr class="st-{{.State}}">
+        <td>
+          <div class="stack">
+            <span>{{.Name}}</span>
+            <span class="sub">{{.MaskedToken}}</span>
+          </div>
+        </td>
+        <td>
+          <div class="stack">
+            <span>{{if .ProfileName}}{{.ProfileName}}{{else}}—{{end}}</span>
+            <span class="sub">{{.Source}}{{if .Endpoint}} · {{.Endpoint}}{{end}}</span>
+          </div>
+        </td>
+        <td>
+          <div class="stack">
+            <span>{{.LastSeenAgo}}</span>
+            <span class="sub">{{.PullCount}} pulls{{if .LastIP}} · {{.LastIP}}{{end}}</span>
+          </div>
+        </td>
+        <td>{{.Added}}</td>
+        <td class="state-{{.State}}">{{.StateLabel}}</td>
+        <td class="actions">
+          <a class="btn ghost small" href="{{$.AdminPath}}clients?edit={{.Token}}">EDIT</a>
+          <form class="inline" method="post" action="{{$.AdminPath}}clients/toggle">
+            <input type="hidden" name="csrf" value="{{$.CSRF}}">
+            <input type="hidden" name="token" value="{{.Token}}">
+            <button class="btn small{{if .Enabled}}{{else}} ghost{{end}}" type="submit">{{if .Enabled}}ON{{else}}OFF{{end}}</button>
+          </form>
+          <form class="inline" method="post" action="{{$.AdminPath}}clients/delete" onsubmit="return confirm('Delete {{.Name}}?')">
+            <input type="hidden" name="csrf" value="{{$.CSRF}}">
+            <input type="hidden" name="token" value="{{.Token}}">
+            <button class="btn danger small" type="submit">DEL</button>
+          </form>
+        </td>
+      </tr>
+      {{else}}
+      <tr><td colspan="6"><span class="note">No clients match.</span></td></tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+
+<div class="plate">
+  <div class="plate-head">{{if .EditClient}}EDIT DEVICE{{else}}ADD DEVICE{{end}}</div>
+  <div class="plate-body">
+    <form method="post" action="{{.AdminPath}}clients/save">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <input type="hidden" name="token" value="{{if .EditClient}}{{.EditClient.Token}}{{end}}">
+      <div class="grid-2">
+        <div class="field">
+          <label>ROUTER NAME</label>
+          <input name="name" required value="{{if .EditClient}}{{.EditClient.Name}}{{end}}">
+        </div>
+        <div class="field">
+          <label>ROUTE PROFILE</label>
+          <select name="profile_id">
+            {{$sel := ""}}{{if .EditClient}}{{$sel = .EditClient.ProfileID}}{{end}}
+            {{range .Profiles}}<option value="{{.ID}}" {{if eq .ID $sel}}selected{{end}}>{{.Name}}</option>{{end}}
+          </select>
+        </div>
+      </div>
+
+      {{if not .EditClient}}
+      <div class="field">
+        <label>KEY SOURCE</label>
+        <div class="check"><input type="radio" name="mode" value="manual" checked id="mode-manual"><label for="mode-manual" style="margin:0">Paste a link manually</label></div>
+        {{if .XUIEnabled}}
+        <div class="check"><input type="radio" name="mode" value="xui" id="mode-xui"><label for="mode-xui" style="margin:0">Issue one through 3x-UI</label></div>
+        {{end}}
+      </div>
+      {{end}}
+
+      <div class="field">
+        <label>PROXY LINK{{if .EditClient}} — leave empty to keep the current one{{end}}</label>
+        <textarea name="proxy_string" style="min-height:80px" placeholder="vless://uuid@host:443?...#name">{{if .EditClient}}{{.EditClient.ProxyString}}{{end}}</textarea>
+      </div>
+
+      <button class="btn" type="submit">{{if .EditClient}}SAVE{{else}}ISSUE KEY{{end}}</button>
+      {{if .EditClient}}<a class="btn ghost" href="{{.AdminPath}}clients">CANCEL</a>{{end}}
+    </form>
+  </div>
+</div>
+{{end}}

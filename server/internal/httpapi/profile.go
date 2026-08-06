@@ -3,6 +3,8 @@ package httpapi
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"log"
 	"net/http"
 
 	"github.com/nifigaprikolno/podkop/server/internal/store"
@@ -77,6 +79,14 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+
+	// A pull is the only liveness signal the panel gets from a router, so
+	// record it before answering.
+	ip := s.clientIP(r)
+	if err := s.store.TouchClient(token, ip); err != nil {
+		log.Printf("touch client: %v", err)
+	}
+	s.events.Info("PULL", fmt.Sprintf("%s fetched profile %q from %s", c.Name, p.Name, ip))
 
 	resp := AssembleProfile(c, p)
 	w.Header().Set("Content-Type", "application/json")

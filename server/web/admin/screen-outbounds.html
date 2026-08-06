@@ -1,0 +1,40 @@
+{{define "screen-outbounds"}}
+<p class="note" style="color:var(--faint)">
+  Exit paths currently handed to routers, derived from the keys this panel issued.
+  RTT is measured on demand — the panel dials the endpoint over TCP and times the handshake;
+  it does not track sessions or traffic.
+</p>
+
+<div class="cards">
+  {{range .Outbounds}}
+  <div class="plate accent-cyan">
+    <div class="plate-head">
+      {{.Scheme}}
+      <span class="right">{{.Source}}</span>
+    </div>
+    <div class="plate-body">
+      <div class="row" style="padding:0;border:none">
+        <div class="stack">
+          <span class="name">{{.Endpoint}}</span>
+          <span class="note">{{.Clients}} client{{if ne .Clients 1}}s{{end}} using this path</span>
+        </div>
+        <span class="right">
+          {{if .Probe}}<span class="seven" style="font-size:20px">{{.Probe}}</span><span class="note">ms</span>{{end}}
+        </span>
+      </div>
+      <form method="post" action="{{$.AdminPath}}outbounds/probe">
+        <input type="hidden" name="csrf" value="{{$.CSRF}}">
+        <input type="hidden" name="endpoint" value="{{.Endpoint}}">
+        <button class="btn ghost small" type="submit">PROBE</button>
+      </form>
+    </div>
+  </div>
+  {{else}}
+  <div class="plate">
+    <div class="plate-body">
+      <span class="note">No keys issued yet, so there is nothing to reach. Add a device on the CLIENTS screen.</span>
+    </div>
+  </div>
+  {{end}}
+</div>
+{{end}}

@@ -1,22 +1,27 @@
 # podkop-server + 3x-UI + nginx.
 #
-# Nothing is published to the public internet by default. The panel is meant to
-# be reachable only from inside the tunnel you already run on this VPS:
+# podkop-server serves two things from one binary:
+#   * the public Halogen devlog on "/" — a real site, and the cover the operator
+#     area lives behind,
+#   * the operator area on the secret PODKOP_SERVER_ADMIN_PATH: the devlog CMS
+#     plus the podkop panel under its Extras tab.
 #
-#   * VLESS path  — the panel is published on the host loopback only
-#                   (PODKOP_SERVER_BIND=127.0.0.1). Xray running on the same
-#                   host dials 127.0.0.1:8080 for the router.
-#   * AWG path    — the panel is published on the AmneziaWG address of the host
-#                   (PODKOP_SERVER_BIND=10.8.1.1), or joined to the docker
-#                   network of your AWG container (see the "awg" block below).
+# Pick exactly one way to reach it from a browser:
 #
-# If Xray/AmneziaWG themselves run in containers, 127.0.0.1 inside those
-# containers is NOT the host loopback: bind to the docker bridge gateway
-# (PODKOP_SERVER_BIND=172.17.0.1) or attach this service to their network.
+#   A. Dedicated port + TLS  — `docker compose --profile public up -d`
+#      nginx terminates TLS on 8443 and proxies to the panel (443 is usually
+#      taken by an Xray Reality inbound, so the panel cannot sit there).
+#      Set PODKOP_SERVER_BIND=127.0.0.1 and PODKOP_SERVER_TRUSTED_PROXY=1.
 #
-# nginx and 3x-UI are parked behind the "public" compose profile and do NOT
-# start by default — the setup above needs no public front end. Bring them back
-# with `docker compose --profile public up -d` if you ever want one.
+#   B. Cloudflare tunnel     — `docker compose --profile tunnel up -d`
+#      Nothing is published at all; cloudflared dials out and Cloudflare
+#      terminates TLS. Set PODKOP_SERVER_TRUSTED_PROXY=1 so the login throttle
+#      sees real client addresses instead of the tunnel's.
+#
+#   C. Tunnel-only (no browser access from the internet)
+#      Leave both profiles off: the panel stays on PODKOP_SERVER_BIND and is
+#      reachable only from the VPS itself or through your own VPN. Pair it with
+#      PODKOP_SERVER_ROOT=decoy if you want the old camouflage page back.
 #
 # Copy .env.example to .env and fill it in before `docker compose up -d`.
 
@@ -38,13 +43,37 @@ services:
       # AWG path via docker networking — see the `awg` network at the bottom.
       #- awg
     # Never "8080:8080" — that would publish the panel on every interface.
-    # PODKOP_SERVER_BIND pins it to one address (loopback by default).
+    # PODKOP_SERVER_BIND pins it to one address (loopback by default); public
+    # access is supposed to arrive through nginx or the tunnel.
     ports:
       - "${PODKOP_SERVER_BIND:-127.0.0.1}:8080:8080"
 
+  # Profile A: TLS front end on 8443.
+  nginx:
+    image: nginx:1.27-alpine
+    profiles: ["public"]
+    restart: unless-stopped
+    depends_on: [podkop-server]
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # Put fullchain.pem / privkey.pem here (certbot, acme.sh, …).
+      - ./certs:/etc/nginx/certs:ro
+    ports:
+      - "8443:443"
+    networks: [internal]
+
+  # Profile B: outbound-only tunnel, no ports opened on the VPS.
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    profiles: ["tunnel"]
+    restart: unless-stopped
+    depends_on: [podkop-server]
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN in .env}
+    networks: [internal]
+
   3x-ui:
     image: ghcr.io/mhsanaei/3x-ui:latest
-    profiles: ["public"]
+    profiles: ["xui"]
     restart: unless-stopped
     environment:
       XRAY_VMESS_AEAD_FORCED: "false"
@@ -59,20 +88,6 @@ services:
     #  - "443:443"
     expose:
       - "2053"
-
-  nginx:
-    image: nginx:1.27-alpine
-    profiles: ["public"]
-    restart: unless-stopped
-    depends_on: [podkop-server]
-    volumes:
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
-      # Mount your TLS certs here and enable the 443 block in nginx.conf.
-      - ./certs:/etc/nginx/certs:ro
-    ports:
-      - "80:80"
-      - "8443:443"
-    networks: [internal]
 
 volumes:
   podkop_data:

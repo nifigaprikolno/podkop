@@ -1,0 +1,135 @@
+{{define "screen-routing"}}
+<div class="split">
+  <div class="plate">
+    <div class="plate-head">
+      RULESET
+      <span class="note">as the router will apply it</span>
+      <span class="right">{{.Drift.Total}} device{{if ne .Drift.Total 1}}s{{end}} assigned</span>
+    </div>
+    <div class="rows">
+      {{range .Rules}}
+      <div class="row accent-{{.Tone}}">
+        <span class="note" style="width:20px">{{.Num}}</span>
+        <div class="stack">
+          <span class="name">{{.Match}}</span>
+          <span class="sub">{{.Detail}}</span>
+        </div>
+        <span class="right tone-{{.Tone}}">{{.Action}}</span>
+      </div>
+      {{else}}
+      <div class="row"><span class="note">No profiles yet — create one below.</span></div>
+      {{end}}
+    </div>
+    <div class="plate-foot">Rules are evaluated top to bottom; anything unmatched goes direct.</div>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:12px;min-width:0">
+    <div class="plate">
+      <div class="plate-head">COMMUNITY LISTS</div>
+      <div class="rows">
+        {{range .Lists}}
+        <div class="row">
+          <div class="stack"><span class="name">{{.Name}}</span><span class="sub">{{.Note}}</span></div>
+          <span class="right seven" style="font-size:14px">{{.Count}}</span>
+        </div>
+        {{else}}
+        <div class="row"><span class="note">No lists assigned.</span></div>
+        {{end}}
+      </div>
+      <div class="plate-foot">The router downloads the lists themselves; the panel only names them.</div>
+    </div>
+
+    {{if gt .Drift.Behind 0}}
+    <div class="callout">
+      <b>PROFILE DRIFT</b>
+      <span>{{.Drift.Behind}} of {{.Drift.Total}} devices last pulled before the current revision ({{.Drift.Updated}}).
+      They keep the previous routing until their next scheduled pull — there is no push channel.</span>
+      <span class="note">{{join .Drift.Names ", "}}</span>
+    </div>
+    {{else}}
+    <div class="plate">
+      <div class="plate-head">SYNC</div>
+      <div class="plate-body"><span class="note">All assigned devices have pulled the current revision ({{.Drift.Updated}}).</span></div>
+    </div>
+    {{end}}
+  </div>
+</div>
+
+{{range .Profiles}}
+<div class="plate">
+  <div class="plate-head">
+    {{.Name}}
+    <span class="right"><a href="{{$.AdminPath}}routing?profile={{.ID}}">SHOW RULES</a></span>
+  </div>
+  <div class="plate-body">
+    <form method="post" action="{{$.AdminPath}}profiles/save">
+      <input type="hidden" name="csrf" value="{{$.CSRF}}">
+      <input type="hidden" name="id" value="{{.ID}}">
+      <div class="grid-2">
+        <div class="field"><label>NAME</label><input name="name" value="{{.Name}}" required></div>
+        <div class="field"><label>UPDATE INTERVAL</label>
+          <select name="update_interval">
+            {{$u := .UpdateInterval}}
+            <option value="1h" {{if eq $u "1h"}}selected{{end}}>1h</option>
+            <option value="3h" {{if eq $u "3h"}}selected{{end}}>3h</option>
+            <option value="12h" {{if eq $u "12h"}}selected{{end}}>12h</option>
+            <option value="1d" {{if eq $u "1d"}}selected{{end}}>1d</option>
+            <option value="3d" {{if eq $u "3d"}}selected{{end}}>3d</option>
+          </select>
+        </div>
+      </div>
+      <div class="field"><label>COMMUNITY LISTS (COMMA SEPARATED)</label>
+        <input name="community_lists" value="{{join .CommunityLists ", "}}"></div>
+      <div class="grid-2">
+        <div class="field"><label>DNS TYPE</label>
+          <select name="dns_type">
+            {{$t := .DNSType}}
+            <option value="doh" {{if eq $t "doh"}}selected{{end}}>doh</option>
+            <option value="dot" {{if eq $t "dot"}}selected{{end}}>dot</option>
+            <option value="udp" {{if eq $t "udp"}}selected{{end}}>udp</option>
+          </select>
+        </div>
+        <div class="field"><label>DNS SERVER</label><input name="dns_server" value="{{.DNSServer}}"></div>
+      </div>
+      <div class="check"><input type="checkbox" name="p2p_direct" {{if .P2PDirect}}checked{{end}}> P2P traffic goes direct</div>
+      <div class="check"><input type="checkbox" name="direct_ru_zones" {{if .DirectRUZones}}checked{{end}}> .ru / .su / .рф go direct</div>
+      <button class="btn" type="submit">SAVE</button>
+    </form>
+    <form method="post" action="{{$.AdminPath}}profiles/delete" onsubmit="return confirm('Delete profile {{.Name}}?')">
+      <input type="hidden" name="csrf" value="{{$.CSRF}}">
+      <input type="hidden" name="id" value="{{.ID}}">
+      <button class="btn danger small" type="submit">DELETE PROFILE</button>
+    </form>
+  </div>
+</div>
+{{end}}
+
+<div class="plate">
+  <div class="plate-head">NEW PROFILE</div>
+  <div class="plate-body">
+    <form method="post" action="{{.AdminPath}}profiles/save">
+      <input type="hidden" name="csrf" value="{{.CSRF}}">
+      <div class="grid-2">
+        <div class="field"><label>NAME</label><input name="name" required></div>
+        <div class="field"><label>UPDATE INTERVAL</label>
+          <select name="update_interval">
+            <option value="1h">1h</option><option value="3h">3h</option><option value="12h">12h</option>
+            <option value="1d" selected>1d</option><option value="3d">3d</option>
+          </select>
+        </div>
+      </div>
+      <div class="field"><label>COMMUNITY LISTS</label>
+        <input name="community_lists" value="russia_inside" placeholder="russia_inside, meta, youtube"></div>
+      <div class="grid-2">
+        <div class="field"><label>DNS TYPE</label>
+          <select name="dns_type"><option value="doh" selected>doh</option><option value="dot">dot</option><option value="udp">udp</option></select>
+        </div>
+        <div class="field"><label>DNS SERVER</label><input name="dns_server" value="https://dns.google/dns-query"></div>
+      </div>
+      <div class="check"><input type="checkbox" name="p2p_direct" checked> P2P traffic goes direct</div>
+      <div class="check"><input type="checkbox" name="direct_ru_zones" checked> .ru / .su / .рф go direct</div>
+      <button class="btn" type="submit">CREATE</button>
+    </form>
+  </div>
+</div>
+{{end}}
