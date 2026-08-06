@@ -1,7 +1,15 @@
 #!/bin/sh
 # shellcheck shell=dash
 
-REPO="https://api.github.com/repos/itdoginfo/podkop/releases/latest"
+# Packages are pulled from this fork's releases, not from upstream: the fork
+# carries the VPS panel integration, the AmneziaWG import and the extended
+# sing-box requirement. Override to install from somewhere else, e.g.
+#   PODKOP_REPO=itdoginfo/podkop PODKOP_BRANCH=main sh install.sh
+PODKOP_REPO="${PODKOP_REPO:-nifigaprikolno/podkop}"
+PODKOP_BRANCH="${PODKOP_BRANCH:-main}"
+
+REPO="https://api.github.com/repos/$PODKOP_REPO/releases/latest"
+CONFIG_URL="https://raw.githubusercontent.com/$PODKOP_REPO/refs/heads/$PODKOP_BRANCH/podkop/files/etc/config/podkop"
 DOWNLOAD_DIR="/tmp/podkop"
 COUNT=3
 
@@ -93,7 +101,7 @@ update_config() {
 
             yes|y|Y)
                 mv /etc/config/podkop /etc/config/podkop-070
-                wget -O /etc/config/podkop https://raw.githubusercontent.com/itdoginfo/podkop/refs/heads/main/podkop/files/etc/config/podkop
+                wget -O /etc/config/podkop "$CONFIG_URL"
                 msg "Podkop config has been reset to default. Your old config saved in /etc/config/podkop-070"
                 break
                 ;;
@@ -119,11 +127,19 @@ main() {
         msg "Installing podkop..."
     fi
 
+    msg "Installing podkop from $PODKOP_REPO"
+
     if command -v curl >/dev/null 2>&1; then
-        check_response=$(curl -s "https://api.github.com/repos/itdoginfo/podkop/releases/latest")
+        check_response=$(curl -s "$REPO")
 
         if echo "$check_response" | grep -q 'API rate limit '; then
             msg "You've reached the GitHub rate limit. Repeat in five minutes."
+            exit 1
+        fi
+
+        if echo "$check_response" | grep -q '"message": *"Not Found"'; then
+            msg "$PODKOP_REPO has no published release yet."
+            msg "Push a tag so the build workflow publishes one, or set PODKOP_REPO to a repo that has releases."
             exit 1
         fi
     fi
@@ -160,7 +176,7 @@ main() {
 
     # Check if any files were downloaded
     if ! ls "$DOWNLOAD_DIR"/*podkop* >/dev/null 2>&1; then
-        msg "No packages were downloaded successfully"
+        msg "No packages were downloaded from the latest release of $PODKOP_REPO"
         exit 1
     fi
 

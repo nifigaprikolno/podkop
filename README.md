@@ -45,10 +45,20 @@ https://podkop.net/
 # Установка Podkop
 Полное руководство доступно в [документации](https://podkop.net/docs/install/)
 
-Для установки и обновления достаточно выполнить один скрипт:
+Для установки и обновления достаточно выполнить один скрипт — он ставит пакеты из
+релизов **этого форка** (extended sing-box, приём настроек с VPS-панели, AmneziaWG):
 ```
-sh <(wget -O - https://raw.githubusercontent.com/itdoginfo/podkop/refs/heads/main/install.sh)
+sh <(wget -O - https://raw.githubusercontent.com/nifigaprikolno/podkop/refs/heads/main/install.sh)
 ```
+
+Поставить апстримный podkop тем же скриптом:
+```
+PODKOP_REPO=itdoginfo/podkop sh <(wget -O - https://raw.githubusercontent.com/itdoginfo/podkop/refs/heads/main/install.sh)
+```
+
+Пакеты берутся из последнего релиза репозитория, а релизы собирает CI по пушу
+тега (`.github/workflows/build.yml`). Пока в форке нет ни одного тега, скрипт об
+этом честно скажет и остановится.
 
 # AmneziaWG 2.0
 
