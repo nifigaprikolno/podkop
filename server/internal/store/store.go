@@ -438,7 +438,6 @@ func (s *Store) EnsureSeedPosts() error {
 			Title:   "The garage scene, and why it came first",
 			Slug:    "garage-scene",
 			Tag:     "tooling",
-			Cover:   "/media/garage-scene.png",
 			Summary: "Before any city, there is a lift, a camera rig and a car that can be taken apart.",
 			Body: "Every racing game I have started before died in the same place: a city got blocked out, " +
 				"nothing drove well, and the whole thing lost its point. So this one starts inside a garage.\n\n" +
@@ -447,8 +446,8 @@ func (s *Store) EnsureSeedPosts() error {
 				"- the gearbox and the torque curve\n" +
 				"- how the car settles when it lands\n" +
 				"- what the player is told about it, and how fast\n\n" +
-				"The collision volumes and the camera track are visible in the editor shot above. Ugly, and " +
-				"exactly as complicated as it needs to be.",
+				"In the editor it is all collision volumes and a camera track. Ugly, and exactly as " +
+				"complicated as it needs to be.",
 			Published: true,
 		},
 		{
