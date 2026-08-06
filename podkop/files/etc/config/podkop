@@ -25,6 +25,11 @@ config settings 'settings'
         option remote_config_url ''
         option remote_config_token ''
         option remote_config_cache '/etc/podkop/remote_profile.json'
+        # How the router reaches the panel: 'direct', 'tunnel_route' (host route
+        # through the tunnel interface) or 'proxy' (through podkop's own outbound)
+        option remote_config_access 'direct'
+        #option remote_config_route_interface 'awg0'
+        #option remote_config_proxy_section 'main'
         #list routing_excluded_ips '192.168.1.3'
 
 config section 'main'

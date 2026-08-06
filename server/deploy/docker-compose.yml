@@ -1,9 +1,22 @@
 # podkop-server + 3x-UI + nginx.
 #
-# - nginx is the only publicly exposed service. It fronts everything with the
-#   decoy site; the operator panel lives on the secret PODKOP_SERVER_ADMIN_PATH.
-# - 3x-UI is reachable only on the internal docker network; podkop-server talks
-#   to its API to issue keys. It is NOT published to the host.
+# Nothing is published to the public internet by default. The panel is meant to
+# be reachable only from inside the tunnel you already run on this VPS:
+#
+#   * VLESS path  — the panel is published on the host loopback only
+#                   (PODKOP_SERVER_BIND=127.0.0.1). Xray running on the same
+#                   host dials 127.0.0.1:8080 for the router.
+#   * AWG path    — the panel is published on the AmneziaWG address of the host
+#                   (PODKOP_SERVER_BIND=10.8.1.1), or joined to the docker
+#                   network of your AWG container (see the "awg" block below).
+#
+# If Xray/AmneziaWG themselves run in containers, 127.0.0.1 inside those
+# containers is NOT the host loopback: bind to the docker bridge gateway
+# (PODKOP_SERVER_BIND=172.17.0.1) or attach this service to their network.
+#
+# nginx and 3x-UI are parked behind the "public" compose profile and do NOT
+# start by default — the setup above needs no public front end. Bring them back
+# with `docker compose --profile public up -d` if you ever want one.
 #
 # Copy .env.example to .env and fill it in before `docker compose up -d`.
 
@@ -20,12 +33,18 @@ services:
       XUI_BASE_URL: "http://3x-ui:2053"
     volumes:
       - podkop_data:/var/lib/podkop-server
-    networks: [internal]
-    expose:
-      - "8080"
+    networks:
+      - internal
+      # AWG path via docker networking — see the `awg` network at the bottom.
+      #- awg
+    # Never "8080:8080" — that would publish the panel on every interface.
+    # PODKOP_SERVER_BIND pins it to one address (loopback by default).
+    ports:
+      - "${PODKOP_SERVER_BIND:-127.0.0.1}:8080:8080"
 
   3x-ui:
     image: ghcr.io/mhsanaei/3x-ui:latest
+    profiles: ["public"]
     restart: unless-stopped
     environment:
       XRAY_VMESS_AEAD_FORCED: "false"
@@ -35,13 +54,15 @@ services:
     networks: [internal]
     # Xray inbound ports must be published so clients can connect. Adjust to the
     # ports of the inbound you create in 3x-UI (e.g. 443 for VLESS-Reality).
-    ports:
-      - "443:443"
+    # Leave this commented out if another Xray (e.g. Amnezia's) already owns 443.
+    #ports:
+    #  - "443:443"
     expose:
       - "2053"
 
   nginx:
     image: nginx:1.27-alpine
+    profiles: ["public"]
     restart: unless-stopped
     depends_on: [podkop-server]
     volumes:
@@ -61,3 +82,11 @@ volumes:
 networks:
   internal:
     driver: bridge
+  # AWG path via docker networking: uncomment both the network below and the
+  # `awg` entry in podkop-server.networks, and set `name` to the network of your
+  # AmneziaWG container (`docker network ls`). The panel then answers on its
+  # address inside that network — check it with
+  # `docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' <container>`.
+  #awg:
+  #  external: true
+  #  name: amnezia-awg_default

@@ -498,6 +498,61 @@ function createSettingsContent(section) {
   o.password = true;
   o.rmempty = true;
 
+  // The panel does not have to be published on the internet — it can live on a
+  // tunnel address or on the VPS loopback. This picks how the router reaches it.
+  o = section.option(
+    form.ListValue,
+    "remote_config_access",
+    _("Panel Access"),
+    _(
+      "How the router reaches the panel. Direct: a plain request. Via tunnel route: adds a host route to the panel IP through the tunnel interface (for a panel on the VPN subnet). Via proxy: the request goes through the proxy outbound, so the panel may listen on the VPS loopback only.",
+    ),
+  );
+  o.value("direct", _("Direct"));
+  o.value("tunnel_route", _("Via tunnel route"));
+  o.value("proxy", _("Via proxy"));
+  o.default = "direct";
+  o.rmempty = false;
+  o.depends("remote_config_enabled", "1");
+
+  o = section.option(
+    form.Value,
+    "remote_config_route_interface",
+    _("Tunnel Interface"),
+    _("Interface the host route to the panel goes through, e.g. awg0"),
+  );
+  o.depends({ remote_config_enabled: "1", remote_config_access: "tunnel_route" });
+  o.placeholder = "awg0";
+  o.rmempty = true;
+
+  o = section.option(
+    form.ListValue,
+    "remote_config_proxy_section",
+    _("Panel via specific proxy section"),
+    _("Section whose outbound is used to reach the panel. Empty: the first proxy/VPN section."),
+  );
+  o.depends({ remote_config_enabled: "1", remote_config_access: "proxy" });
+  o.rmempty = true;
+  o.cfgvalue = function (section_id) {
+    return uci.get("podkop", section_id, "remote_config_proxy_section");
+  };
+  o.load = function () {
+    const sections = this.map?.data?.state?.values?.podkop ?? {};
+
+    this.keylist = [""];
+    this.vallist = [_("First proxy/VPN section")];
+
+    for (const secName in sections) {
+      const sec = sections[secName];
+      if (sec[".type"] === "section" && sec['connection_type'] !== 'block' && sec['connection_type'] !== 'exclusion') {
+        this.keylist.push(secName);
+        this.vallist.push(secName);
+      }
+    }
+
+    return Promise.resolve();
+  };
+
   o = section.option(form.Button, "_remote_config_apply", _("Route Profile"));
   o.depends("remote_config_enabled", "1");
   o.inputtitle = _("Apply profile now");

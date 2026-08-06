@@ -827,6 +827,36 @@ msgstr "Ключ / токен клиента"
 msgid "The key issued to this router by the VPS panel"
 msgstr "Ключ, выданный этому роутеру VPS-панелью"
 
+msgid "Panel Access"
+msgstr "Доступ к панели"
+
+msgid "How the router reaches the panel. Direct: a plain request. Via tunnel route: adds a host route to the panel IP through the tunnel interface (for a panel on the VPN subnet). Via proxy: the request goes through the proxy outbound, so the panel may listen on the VPS loopback only."
+msgstr "Как роутер достаёт панель. Напрямую: обычный запрос. Через маршрут в туннель: добавляется точечный маршрут до IP панели через интерфейс туннеля (панель во внутренней сети VPN). Через прокси: запрос идёт через прокси-подключение, поэтому панель может слушать только на loopback VPS."
+
+msgid "Direct"
+msgstr "Напрямую"
+
+msgid "Via tunnel route"
+msgstr "Через маршрут в туннель"
+
+msgid "Via proxy"
+msgstr "Через прокси"
+
+msgid "Tunnel Interface"
+msgstr "Интерфейс туннеля"
+
+msgid "Interface the host route to the panel goes through, e.g. awg0"
+msgstr "Интерфейс, через который прокладывается маршрут до панели, напр. awg0"
+
+msgid "Panel via specific proxy section"
+msgstr "Панель через конкретную секцию прокси"
+
+msgid "Section whose outbound is used to reach the panel. Empty: the first proxy/VPN section."
+msgstr "Секция, через подключение которой роутер идёт к панели. Пусто — первая секция Proxy/VPN."
+
+msgid "First proxy/VPN section"
+msgstr "Первая секция Proxy/VPN"
+
 msgid "Route Profile"
 msgstr "Профиль маршрутов"
 

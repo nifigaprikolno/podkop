@@ -15,9 +15,21 @@
 #     "dns":             { "type": "doh", "server": "https://..." },
 #     "update_interval":  "1d"
 #   }
+#
+# The panel does not have to be published on the internet: remote_config_access
+# selects how the router reaches it.
+#   direct       — plain request to remote_config_url (default, old behaviour)
+#   tunnel_route — the panel lives on a tunnel address (e.g. the AmneziaWG /24);
+#                  podkop adds a single host route through the tunnel interface,
+#                  because AWG sections are imported with route_allowed_ips=0 and
+#                  therefore install no routes of their own
+#   proxy        — the request goes through podkop's own service mixed inbound,
+#                  so it leaves via the proxy outbound and the panel can sit on
+#                  the VPS loopback (127.0.0.1:8080)
 
 REMOTE_CONFIG_DEFAULT_CACHE="/etc/podkop/remote_profile.json"
 REMOTE_CONFIG_CURL_TIMEOUT=15
+REMOTE_CONFIG_DEFAULT_ACCESS="direct"
 
 # Is remote management enabled and configured? Echoes url/token via globals.
 _remote_config_load_settings() {
@@ -25,6 +37,103 @@ _remote_config_load_settings() {
     config_get _rc_url "settings" "remote_config_url"
     config_get _rc_token "settings" "remote_config_token"
     config_get _rc_cache "settings" "remote_config_cache" "$REMOTE_CONFIG_DEFAULT_CACHE"
+    config_get _rc_access "settings" "remote_config_access" "$REMOTE_CONFIG_DEFAULT_ACCESS"
+    config_get _rc_route_iface "settings" "remote_config_route_interface" "$AWG_DEFAULT_INTERFACE"
+}
+
+# IPv4 check without regexes: is_ipv4() in helpers.sh leans on escapes whose
+# support differs between shells and libc regex engines, and a wrong answer here
+# would silently refuse to install the route.
+_remote_config_is_ipv4() {
+    local ip="$1" octet count=0
+
+    case "$ip" in
+    "" | *[!0-9.]* | .* | *. | *..*) return 1 ;;
+    esac
+
+    while [ -n "$ip" ]; do
+        octet="${ip%%.*}"
+        case "$ip" in
+        *.*) ip="${ip#*.}" ;;
+        *) ip="" ;;
+        esac
+
+        [ "${#octet}" -le 3 ] || return 1
+        [ "$octet" -le 255 ] || return 1
+        count=$((count + 1))
+    done
+
+    [ "$count" -eq 4 ]
+}
+
+# Host route to the panel through the tunnel interface. Idempotent, in the style
+# of route_table_rule_mark. The panel host must be an IP: a domain would have to
+# be resolved first, and its address may well be outside the tunnel.
+_remote_config_ensure_route() {
+    local host="$1" iface="$2"
+
+    if [ -z "$host" ] || [ -z "$iface" ]; then
+        log "remote_config: tunnel_route needs both a panel host and an interface" "error"
+        return 1
+    fi
+
+    if ! _remote_config_is_ipv4 "$host"; then
+        log "remote_config: tunnel_route requires an IP in remote_config_url, got '$host'" "error"
+        return 1
+    fi
+
+    if ! ip link show "$iface" > /dev/null 2>&1; then
+        log "remote_config: interface '$iface' does not exist, cannot route to the panel" "error"
+        return 1
+    fi
+
+    if [ -n "$(ip route show "$host/32" dev "$iface" 2> /dev/null)" ]; then
+        log "remote_config: route to the panel exists" "debug"
+        return 0
+    fi
+
+    if ip route add "$host/32" dev "$iface"; then
+        log "remote_config: added route $host/32 dev $iface"
+        return 0
+    fi
+
+    log "remote_config: failed to add route $host/32 dev $iface" "error"
+    return 1
+}
+
+_remote_config_remove_route() {
+    local host="$1" iface="$2"
+
+    [ -n "$host" ] && [ -n "$iface" ] || return 0
+    _remote_config_is_ipv4 "$host" || return 0
+
+    if [ -n "$(ip route show "$host/32" dev "$iface" 2> /dev/null)" ]; then
+        ip route del "$host/32" dev "$iface" 2> /dev/null
+        log "remote_config: removed route $host/32 dev $iface" "debug"
+    fi
+}
+
+# Add/remove the panel route around the service lifecycle. No-ops unless the
+# tunnel_route access mode is selected.
+remote_config_route_up() {
+    local _rc_enabled _rc_url _rc_token _rc_cache _rc_access _rc_route_iface
+    _remote_config_load_settings
+
+    [ "$_rc_enabled" -eq 1 ] || return 0
+    [ "$_rc_access" = "tunnel_route" ] || return 0
+    [ -n "$_rc_url" ] || return 0
+
+    _remote_config_ensure_route "$(url_get_host "$_rc_url")" "$_rc_route_iface"
+}
+
+remote_config_route_down() {
+    local _rc_enabled _rc_url _rc_token _rc_cache _rc_access _rc_route_iface
+    _remote_config_load_settings
+
+    [ "$_rc_access" = "tunnel_route" ] || return 0
+    [ -n "$_rc_url" ] || return 0
+
+    _remote_config_remove_route "$(url_get_host "$_rc_url")" "$_rc_route_iface"
 }
 
 # Build the profile endpoint URL from the configured base URL.
@@ -34,13 +143,29 @@ _remote_config_profile_url() {
 }
 
 # Fetch the profile JSON from the panel. Echoes JSON on stdout, non-zero on failure.
-# Downloads through the tunnel when download_lists_via_proxy is configured.
+# The transport depends on the access mode (see the header of this file).
 _remote_config_fetch() {
-    local url="$1" token="$2"
-    local service_proxy_address response
+    local url="$1" token="$2" access="$3" iface="$4"
+    local service_proxy_address response host
 
+    host="$(url_get_host "$url")"
     url="$(_remote_config_profile_url "$url")"
-    service_proxy_address="$(get_service_proxy_address)"
+
+    case "$access" in
+    "proxy")
+        # Force the service mixed inbound; everything entering it is routed to
+        # the proxy outbound, so the panel is dialed from the VPS side.
+        service_proxy_address="$(get_service_mixed_inbound_address)"
+        ;;
+    "tunnel_route")
+        _remote_config_ensure_route "$host" "$iface" || return 1
+        service_proxy_address=""
+        ;;
+    *)
+        # direct: still honour download_lists_via_proxy, as before
+        service_proxy_address="$(get_service_proxy_address)"
+        ;;
+    esac
 
     if [ -n "$service_proxy_address" ]; then
         response="$(curl -fsSL -x "http://$service_proxy_address" -m "$REMOTE_CONFIG_CURL_TIMEOUT" \
@@ -117,7 +242,7 @@ _remote_config_apply() {
 # Apply the cached profile without any network access. Used at service start so the
 # router boots with the last known-good settings even when the panel is offline.
 remote_config_apply_cached() {
-    local _rc_enabled _rc_url _rc_token _rc_cache
+    local _rc_enabled _rc_url _rc_token _rc_cache _rc_access _rc_route_iface
     _remote_config_load_settings
     [ "$_rc_enabled" -eq 1 ] || return 0
 
@@ -133,7 +258,7 @@ remote_config_apply_cached() {
 # cached profile when the panel is unreachable. Reloads only when something changed.
 # Used by cron and by the "Apply now" button in the UI.
 remote_config_update() {
-    local _rc_enabled _rc_url _rc_token _rc_cache
+    local _rc_enabled _rc_url _rc_token _rc_cache _rc_access _rc_route_iface
     _remote_config_load_settings
 
     if [ "$_rc_enabled" -ne 1 ]; then
@@ -145,10 +270,18 @@ remote_config_update() {
         return 1
     fi
 
-    echolog "🔄 Fetching route profile from the panel..."
+    case "$_rc_access" in
+    "direct" | "tunnel_route" | "proxy") ;;
+    *)
+        echolog "❌ Remote config: unknown access mode '$_rc_access'"
+        return 1
+        ;;
+    esac
+
+    echolog "🔄 Fetching route profile from the panel ($_rc_access)..."
 
     local profile changed=1
-    if profile="$(_remote_config_fetch "$_rc_url" "$_rc_token")"; then
+    if profile="$(_remote_config_fetch "$_rc_url" "$_rc_token" "$_rc_access" "$_rc_route_iface")"; then
         if [ -r "$_rc_cache" ] && [ "$profile" = "$(cat "$_rc_cache")" ]; then
             changed=0
             echolog "✅ Profile unchanged"
@@ -181,7 +314,8 @@ remote_config_update() {
 
 # Install/refresh the cron job that pulls the profile on the configured interval.
 add_remote_config_cron_job() {
-    local _rc_enabled _rc_url _rc_token _rc_cache update_interval cron_job
+    local _rc_enabled _rc_url _rc_token _rc_cache _rc_access _rc_route_iface
+    local update_interval cron_job
     _remote_config_load_settings
     [ "$_rc_enabled" -eq 1 ] || return 0
 
