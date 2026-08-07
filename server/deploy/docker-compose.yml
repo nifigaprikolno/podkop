@@ -68,7 +68,15 @@ services:
     profiles: ["tunnel"]
     restart: unless-stopped
     depends_on: [podkop-server]
-    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:?set CLOUDFLARE_TUNNEL_TOKEN in .env}
+    # The token goes through the environment rather than the command line:
+    # argv is visible to anything that can run `ps` or `docker inspect`.
+    # It is also not marked required — compose interpolates every service in
+    # the file regardless of profiles, so a missing token here would break
+    # plain `docker compose ps` for everyone. cloudflared reports the empty
+    # token itself when this profile is actually started.
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    command: tunnel --no-autoupdate run
     networks: [internal]
 
   3x-ui:
