@@ -95,12 +95,13 @@ services:
       - xui_db:/etc/x-ui
       - xui_cert:/root/cert
     networks: [internal]
-    # Xray inbound ports must be published so clients can connect. Adjust to the
-    # ports of the inbound you create in 3x-UI (e.g. 443 for VLESS-Reality).
-    # Leave this commented out if another Xray (e.g. Amnezia's) already owns 443.
-    #ports:
-    #  - "443:443"
     ports:
+      # The Xray inbound itself — clients connect here, so it is published on
+      # every interface. Same number inside and out: it has to match the port
+      # of the inbound you create in 3x-UI. Set XRAY_PORT in .env if something
+      # else on the VPS already owns 443 (another Xray, Amnezia, a web server).
+      - "${XRAY_PORT:-443}:${XRAY_PORT:-443}"
+      - "${XRAY_PORT:-443}:${XRAY_PORT:-443}/udp"
       # 3x-UI's own web interface. Loopback by default, so it is reachable from
       # the VPS itself (`ssh -L 2053:127.0.0.1:2053 vps`) and from nothing else.
       # To publish it instead, add a hostname route to 3x-ui:2053 in the tunnel

@@ -189,6 +189,43 @@ CGO_ENABLED=0 GOARCH=arm64 go build \
   -ldflags "-X main.version=$(git describe --tags --always)" ./cmd/podkop-server
 ```
 
+## Первый ключ (телефон, без роутера)
+
+Порядок, если нужен просто рабочий VLESS на устройство:
+
+```sh
+cd ~/podkop && git pull
+cd server/deploy
+# в .env: XRAY_PORT=443 (или другой, если 443 занят), XUI_UI_BIND=127.0.0.1
+docker compose --profile tunnel --profile xui up -d
+docker compose logs 3x-ui | head -40      # логин, пароль и webBasePath первого запуска
+```
+
+3x-UI при первом старте генерирует случайные учётные данные и случайный
+`webBasePath` — они видны только в логе, сохраните их сразу. Интерфейс наружу не
+смотрит, заходить через туннель с локальной машины:
+
+```sh
+ssh -L 2053:127.0.0.1:2053 root@ВАШ_VPS
+# затем в браузере http://127.0.0.1:2053/<webBasePath>/
+```
+
+Inbound: **VLESS**, Security **Reality**, Transport **TCP**, Flow
+`xtls-rprx-vision`, порт — тот же `XRAY_PORT`. Reality-ключи генерируются
+кнопкой в форме, dest/SNI берите с чужого сайта, который реально отвечает по
+TLS 1.3 и не заблокирован в вашей стране. Дальше добавьте клиента, откройте у
+него QR — телефон читает его любым современным клиентом (v2rayNG, Streisand,
+Happ).
+
+Адрес в ссылке — **IP сервера или DNS-only запись**. Домен, который смотрит в
+Cloudflare-туннель, сюда не годится: там CNAME на Cloudflare, и клиент придёт
+не на ваш Xray. Если хочется имени, заведите отдельную A-запись с серым
+облаком (proxy off) на IP VPS.
+
+Чтобы ключи выдавались уже из панели (экран CLIENTS), допишите в `.env`
+логин/пароль 3x-UI, `XUI_INBOUND_ID` созданного inbound и `XUI_PUBLIC_HOST` —
+тот самый IP или DNS-only домен, — и перезапустите `podkop-server`.
+
 ## Настройка роутера
 
 Порядок важен: **сначала руками поднимите туннель** (вставьте `.conf`
