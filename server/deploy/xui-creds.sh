@@ -54,14 +54,43 @@ done
 
 if [ -n "$RESET" ]; then
     NEW_PASSWORD=$(LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | dd bs=1 count=24 2>/dev/null)
+    NEW_PATH="/$(LC_ALL=C tr -dc 'a-z0-9' </dev/urandom | dd bs=1 count=12 2>/dev/null)/"
+
     printf '\nSetting a new login:\n  username: %s\n  password: %s\n' "$USERNAME" "$NEW_PASSWORD"
     compose exec -T 3x-ui "$XUI" setting -username "$USERNAME" -password "$NEW_PASSWORD"
+
+    # A panel sitting at "/" is one hostname route away from being the first
+    # thing a scanner finds, so the path gets moved too. Older builds have no
+    # such flag — then it is a field in Panel Settings.
+    if compose exec -T 3x-ui "$XUI" setting -webBasePath "$NEW_PATH" >/dev/null 2>&1; then
+        printf '  path:     %s\n' "$NEW_PATH"
+    else
+        printf '  path:     unchanged — this build takes no -webBasePath;\n'
+        printf '            set it in Panel Settings once you are logged in\n'
+    fi
+
     compose restart 3x-ui >/dev/null
     printf 'Done — the container was restarted so the change takes effect.\n'
 fi
 
 printf '\nCurrent settings:\n'
-compose exec -T 3x-ui "$XUI" setting -show
+settings=$(compose exec -T 3x-ui "$XUI" setting -show 2>&1 || true)
+printf '%s\n' "$settings"
+
+case "$settings" in
+    *hasDefaultCredential:\ true*)
+        printf '\n!! The panel still has its default login. Anyone who reaches port\n'
+        printf '!! 2053 is in — right now only loopback does, but do not publish it\n'
+        printf '!! on a hostname before running: ./xui-creds.sh --reset\n'
+        ;;
+esac
+
+case "$settings" in
+    *"webBasePath: /"[!a-zA-Z0-9]* | *"webBasePath: /")
+        printf '\nNote: the panel answers at the root path. Behind Cloudflare Access\n'
+        printf 'that is survivable, but a secret path is the cheaper second layer.\n'
+        ;;
+esac
 
 printf '\nThe interface stays on loopback. Reach it with:\n'
 printf '  ssh -L 2053:127.0.0.1:2053 %s@THIS-VPS\n' "$(id -un)"
