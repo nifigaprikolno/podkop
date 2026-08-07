@@ -217,8 +217,21 @@ type streamSettings struct {
 	} `json:"grpcSettings"`
 }
 
-// Network reports the inbound's transport ("tcp" when unset) and its security
-// layer, so callers can decide what a client on it may use.
+// normalizeNetwork folds the transport onto the name share links use. Xray
+// renamed the plain TCP transport to "raw", and 3x-UI now writes that into new
+// inbounds — but it is the same transport, it still carries XTLS Vision, and
+// older clients only recognise "tcp" in a link.
+func normalizeNetwork(network string) string {
+	switch strings.ToLower(strings.TrimSpace(network)) {
+	case "", "tcp", "raw":
+		return "tcp"
+	default:
+		return strings.ToLower(network)
+	}
+}
+
+// Network reports the inbound's transport ("tcp" when unset or named "raw")
+// and its security layer, so callers can decide what a client on it may use.
 func (in *Inbound) Network() (network, security string, err error) {
 	var ss streamSettings
 	if in.StreamSettings != "" {
@@ -226,11 +239,7 @@ func (in *Inbound) Network() (network, security string, err error) {
 			return "", "", fmt.Errorf("parse streamSettings: %w", err)
 		}
 	}
-	network = ss.Network
-	if network == "" {
-		network = "tcp"
-	}
-	return network, strings.ToLower(ss.Security), nil
+	return normalizeNetwork(ss.Network), strings.ToLower(ss.Security), nil
 }
 
 // SupportsFlow reports whether a client on this inbound may carry an XTLS flow.
@@ -263,10 +272,7 @@ func (c *Client) BuildVlessLink(in *Inbound, cl ClientSettings) (string, error) 
 	}
 
 	q := url.Values{}
-	network := ss.Network
-	if network == "" {
-		network = "tcp"
-	}
+	network := normalizeNetwork(ss.Network)
 	q.Set("type", network)
 	// Stated explicitly rather than left to the client's default: with VLESS
 	// Encryption in play the value is no longer always "none".

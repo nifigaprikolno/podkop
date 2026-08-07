@@ -227,3 +227,35 @@ func TestBuildVlessLinkDefaultsEncryptionToNone(t *testing.T) {
 		t.Errorf("TCP inbound should keep the flow:\n%s", link)
 	}
 }
+
+// Xray renamed the TCP transport to "raw"; new 3x-UI inbounds carry that name.
+// Treating it as an unknown transport would strip Vision off a link that can
+// carry it, and emit a type= value older clients do not understand.
+func TestBuildVlessLinkTreatsRawAsTCP(t *testing.T) {
+	c := &Client{publicHost: "144.31.12.79"}
+	in := &Inbound{
+		ID: 1, Port: 443, Protocol: "vless", Remark: "in-443-raw",
+		Settings: `{"clients":[],"decryption":"none"}`,
+		StreamSettings: `{"network":"raw","security":"reality",
+			"realitySettings":{"serverNames":["www.samsung.com"],"shortIds":["bd5f"],
+				"settings":{"publicKey":"pk","fingerprint":"chrome"}}}`,
+	}
+
+	if !in.SupportsFlow() {
+		t.Error("a raw+reality inbound carries Vision and must report so")
+	}
+	if network, _, err := in.Network(); err != nil || network != "tcp" {
+		t.Errorf("Network() = %q, %v; want tcp", network, err)
+	}
+
+	link, err := c.BuildVlessLink(in, ClientSettings{ID: "uuid-3", Flow: "xtls-rprx-vision"})
+	if err != nil {
+		t.Fatalf("BuildVlessLink: %v", err)
+	}
+	if !strings.Contains(link, "type=tcp") {
+		t.Errorf("want type=tcp for wider client support:\n%s", link)
+	}
+	if !strings.Contains(link, "flow=xtls-rprx-vision") {
+		t.Errorf("Vision was dropped off a transport that supports it:\n%s", link)
+	}
+}
