@@ -322,9 +322,13 @@ func (s *Server) handleDecoy(w http.ResponseWriter, r *http.Request) {
 }
 
 // logRequests logs method + path but never query strings (they carry tokens).
+// The duration is what the server itself spent: when the panel feels slow over
+// a tunnel, this is the number that says whether the time went here or on the
+// way here.
 func logRequests(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		log.Printf("%s %s", r.Method, r.URL.Path)
+		started := time.Now()
 		next.ServeHTTP(w, r)
+		log.Printf("%s %s %s", r.Method, r.URL.Path, time.Since(started).Round(time.Millisecond))
 	})
 }
