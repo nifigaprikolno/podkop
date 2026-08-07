@@ -73,6 +73,12 @@ a:hover { color: var(--warm); }
 .nav-item .label { font-family: var(--display); font-weight: 600; font-size: 13px; letter-spacing: 2.5px; color: var(--dim); }
 .nav-item.active .label { color: var(--warm); }
 .nav-item .tag { margin-left: auto; font-size: 10px; color: var(--cyan-dim); }
+/* Screens that live on the local address only: dimmed, and the arrow says the
+   link leaves this hostname rather than moving inside it. */
+.nav-item.elsewhere .label { color: rgba(190, 235, 255, 0.32); }
+.nav-item.elsewhere .num { color: rgba(190, 235, 255, 0.22); }
+.nav-item.elsewhere .tag { color: rgba(190, 235, 255, 0.32); }
+.nav-item.elsewhere:hover .label { color: var(--dim); }
 .nav-foot { display: flex; flex-direction: column; gap: 4px; padding: 14px 18px 18px; border-top: 1px solid rgba(190, 235, 255, 0.12); font-size: 11px; color: var(--faint); }
 .nav-foot b { font-size: 9px; letter-spacing: 2.5px; color: rgba(190, 235, 255, 0.45); font-weight: 400; }
 

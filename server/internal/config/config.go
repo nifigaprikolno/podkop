@@ -47,6 +47,20 @@ type Config struct {
 	// therefore protects only itself: the same path stays open on the apex.
 	AdminLocalOnly bool
 
+	// ExtrasLocalOnly keeps the podkop panel — clients, keys, outbounds, routing
+	// — off the internet while leaving the devlog CMS reachable. Posts can then
+	// be written from anywhere, which is what keeps the cover site alive, and
+	// the screens that would give away what the server really is answer only
+	// through a tunnel to the VPS.
+	//
+	// A milder AdminLocalOnly: that one takes the whole operator area away.
+	ExtrasLocalOnly bool
+
+	// LocalURL is where the operator area answers locally — the base the EXTRAS
+	// button points at once those screens have moved off the internet. It is a
+	// hint printed into a page, never something the server dials.
+	LocalURL string
+
 	// DecoyDir optionally overrides the built-in decoy site with a custom one.
 	DecoyDir string
 
@@ -136,25 +150,27 @@ func envInt(key string, def int) (int, error) {
 // Load reads the configuration from the environment and validates it.
 func Load() (*Config, error) {
 	c := &Config{
-		Listen:        env("PODKOP_SERVER_LISTEN", ":8080"),
-		StorePath:     env("PODKOP_SERVER_STORE", "/var/lib/podkop-server/store.json"),
-		AdminPath:     env("PODKOP_SERVER_ADMIN_PATH", "/manage/"),
-		AdminUser:     env("PODKOP_SERVER_ADMIN_USER", "admin"),
-		AdminHost:      strings.ToLower(strings.TrimSpace(env("PODKOP_SERVER_ADMIN_HOST", ""))),
-		AdminLocalOnly: envBool("PODKOP_SERVER_ADMIN_LOCAL_ONLY", false),
-		PublicURL:     strings.TrimRight(strings.TrimSpace(env("PODKOP_SERVER_PUBLIC_URL", "")), "/"),
-		AdminPassword: env("PODKOP_SERVER_ADMIN_PASSWORD", ""),
-		DecoyDir:      env("PODKOP_SERVER_DECOY_DIR", ""),
-		Root:          strings.ToLower(strings.TrimSpace(env("PODKOP_SERVER_ROOT", "site"))),
-		SiteIndexing:  envBool("PODKOP_SERVER_SITE_INDEXING", false),
-		SiteName:      env("PODKOP_SERVER_SITE_NAME", "Backfire"),
-		SiteTagline:   env("PODKOP_SERVER_SITE_TAGLINE", "an open-city street racer on s&box"),
-		TrustedProxy:  envBool("PODKOP_SERVER_TRUSTED_PROXY", false),
-		XUIBaseURL:    strings.TrimRight(env("XUI_BASE_URL", ""), "/"),
-		XUIUsername:   env("XUI_USERNAME", ""),
-		XUIPassword:   env("XUI_PASSWORD", ""),
-		XUIPublicHost: env("XUI_PUBLIC_HOST", ""),
-		XUIClientFlow: strings.TrimSpace(env("XUI_CLIENT_FLOW", "")),
+		Listen:          env("PODKOP_SERVER_LISTEN", ":8080"),
+		StorePath:       env("PODKOP_SERVER_STORE", "/var/lib/podkop-server/store.json"),
+		AdminPath:       env("PODKOP_SERVER_ADMIN_PATH", "/manage/"),
+		AdminUser:       env("PODKOP_SERVER_ADMIN_USER", "admin"),
+		AdminHost:       strings.ToLower(strings.TrimSpace(env("PODKOP_SERVER_ADMIN_HOST", ""))),
+		AdminLocalOnly:  envBool("PODKOP_SERVER_ADMIN_LOCAL_ONLY", false),
+		ExtrasLocalOnly: envBool("PODKOP_SERVER_EXTRAS_LOCAL_ONLY", false),
+		LocalURL:        strings.TrimRight(strings.TrimSpace(env("PODKOP_SERVER_LOCAL_URL", "http://127.0.0.1:8080")), "/"),
+		PublicURL:       strings.TrimRight(strings.TrimSpace(env("PODKOP_SERVER_PUBLIC_URL", "")), "/"),
+		AdminPassword:   env("PODKOP_SERVER_ADMIN_PASSWORD", ""),
+		DecoyDir:        env("PODKOP_SERVER_DECOY_DIR", ""),
+		Root:            strings.ToLower(strings.TrimSpace(env("PODKOP_SERVER_ROOT", "site"))),
+		SiteIndexing:    envBool("PODKOP_SERVER_SITE_INDEXING", false),
+		SiteName:        env("PODKOP_SERVER_SITE_NAME", "Backfire"),
+		SiteTagline:     env("PODKOP_SERVER_SITE_TAGLINE", "an open-city street racer on s&box"),
+		TrustedProxy:    envBool("PODKOP_SERVER_TRUSTED_PROXY", false),
+		XUIBaseURL:      strings.TrimRight(env("XUI_BASE_URL", ""), "/"),
+		XUIUsername:     env("XUI_USERNAME", ""),
+		XUIPassword:     env("XUI_PASSWORD", ""),
+		XUIPublicHost:   env("XUI_PUBLIC_HOST", ""),
+		XUIClientFlow:   strings.TrimSpace(env("XUI_CLIENT_FLOW", "")),
 	}
 
 	// A typo here would be silent: the key gets issued and simply never

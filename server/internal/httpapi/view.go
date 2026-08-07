@@ -3,6 +3,7 @@ package httpapi
 import (
 	"fmt"
 	"html/template"
+	"net/http"
 	"net/url"
 	"sort"
 	"strings"
@@ -64,6 +65,10 @@ type navItem struct {
 	Tag     string
 	Active  bool
 	Section string
+	// Elsewhere marks an item whose screen does not answer on this hostname:
+	// the link points at the local address instead, and opens in a new tab so
+	// the operator does not lose the page they are on when the tunnel is down.
+	Elsewhere bool
 }
 
 // The view types double as the JSON payload of the live-refresh endpoint, so
@@ -192,7 +197,13 @@ var screenMeta = map[string][3]string{
 	screenConfig:    {"CONFIG", "environment and build, read-only", "extras"},
 }
 
-func (s *Server) newPage(screen string) pageData {
+func (s *Server) newPage(screen string) pageData { return s.newPageFor(nil, screen) }
+
+// newPageFor builds a page knowing which request asked for it, which is what
+// decides whether the panel's own screens are links or pointers elsewhere. A
+// nil request means "local": the callers that pass one are the ones serving the
+// operator area, and the rest only ever render it for themselves.
+func (s *Server) newPageFor(r *http.Request, screen string) pageData {
 	meta := screenMeta[screen]
 	p := pageData{
 		AdminPath:  s.cfg.AdminPath,
@@ -204,12 +215,16 @@ func (s *Server) newPage(screen string) pageData {
 		XUIEnabled: s.xui != nil,
 		Version:    s.build.Version,
 	}
-	p.Nav = s.navFor(screen)
+	p.Nav = s.navFor(r, screen)
 	p.Uptime = formatUptime(time.Since(s.startedAt))
 	return p
 }
 
-func (s *Server) navFor(active string) []navItem {
+func (s *Server) navFor(r *http.Request, active string) []navItem {
+	// A nil request is a local render; anything else asks the same question the
+	// dispatcher does, so the menu and the routes cannot disagree.
+	extrasHere := r == nil || s.extrasReachable(r)
+
 	order := []string{screenNews, screenOverview, screenClients, screenOutbounds, screenRouting, screenLogs, screenConfig}
 	out := make([]navItem, 0, len(order))
 	for i, key := range order {
@@ -221,12 +236,22 @@ func (s *Server) navFor(active string) []navItem {
 			Active:  key == active,
 			Section: meta[2],
 		}
-		switch key {
-		case screenNews:
+		// Off the local address the panel's screens are not served here at all,
+		// so point at where they are instead of at a link that would 404.
+		if meta[2] == "extras" && !extrasHere {
+			item.Href = s.cfg.LocalURL + s.cfg.AdminPath + key
+			item.Elsewhere = true
+			item.Active = false
+		}
+		switch {
+		case item.Elsewhere:
+			// The client count is a fact about the VPN, and the whole point of
+			// moving these screens off the internet is not to state it there.
+		case key == screenNews:
 			if n := len(s.store.Posts(false)); n > 0 {
 				item.Tag = fmt.Sprintf("%d", n)
 			}
-		case screenClients:
+		case key == screenClients:
 			if n := len(s.store.Clients()); n > 0 {
 				item.Tag = fmt.Sprintf("%d", n)
 			}

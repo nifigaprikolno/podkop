@@ -302,9 +302,20 @@ func (s *Server) adminReachable(r *http.Request) bool {
 	if !s.cfg.AdminLocalOnly {
 		return true
 	}
-	if s.isAdminHost(r) {
-		return true
-	}
+	return s.isAdminHost(r) || s.requestIsLocal(r)
+}
+
+// extrasReachable reports whether the podkop panel — as opposed to the devlog
+// CMS next to it — answers on this request. AdminHost does not count here: the
+// point of the option is that clients and keys are reached through a tunnel,
+// and a hostname on the internet is not one however well it is guarded.
+func (s *Server) extrasReachable(r *http.Request) bool {
+	return !s.cfg.ExtrasLocalOnly || s.requestIsLocal(r)
+}
+
+// requestIsLocal reports whether the request arrived on a loopback Host — which
+// in practice means through an SSH tunnel to the VPS.
+func (s *Server) requestIsLocal(r *http.Request) bool {
 	// A request that came through Cloudflare is not local whatever it claims.
 	if r.Header.Get("CF-Ray") != "" || r.Header.Get("CF-Connecting-IP") != "" {
 		return false

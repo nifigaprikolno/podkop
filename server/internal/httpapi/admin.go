@@ -96,6 +96,14 @@ func (s *Server) handleAdmin(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// With the panel kept local, its screens and every action behind them are
+	// simply not here as far as the internet is concerned. The CMS beside them
+	// stays reachable, so the cover site can still be written from anywhere.
+	if !s.extrasReachable(r) && isExtrasRoute(rel) {
+		http.NotFound(w, r)
+		return
+	}
+
 	switch rel {
 	case screenNews:
 		s.adminNews(w, r)
@@ -138,6 +146,34 @@ func (s *Server) handleAdmin(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 	}
 }
+
+// extrasRoutes is every route that belongs to the podkop panel rather than to
+// the devlog CMS. Listed rather than derived so that adding a screen without
+// deciding which side of the line it falls on is a compile-time omission here
+// and not a screen that quietly stays on the internet.
+var extrasRoutes = map[string]bool{
+	screenOverview:         true,
+	screenClients:          true,
+	screenOutbounds:        true,
+	screenRouting:          true,
+	screenLogs:             true,
+	screenConfig:           true,
+	"dashboard":            true,
+	"clients/save":         true,
+	"clients/create":       true,
+	"clients/delete":       true,
+	"clients/toggle":       true,
+	"profiles/save":        true,
+	"profiles/delete":      true,
+	"outbounds/probe":      true,
+	"config/reload-store":  true,
+	"config/drop-sessions": true,
+	"config/check-xui":     true,
+	// The live-refresh endpoint carries the overview tiles and the log tail.
+	"api/state": true,
+}
+
+func isExtrasRoute(rel string) bool { return extrasRoutes[rel] }
 
 func (s *Server) assetHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -256,7 +292,7 @@ func isHTTPS(r *http.Request) bool {
 
 func (s *Server) adminScreen(w http.ResponseWriter, r *http.Request, screen string) {
 	q := r.URL.Query()
-	p := s.newPage(screen)
+	p := s.newPageFor(r, screen)
 	p.CSRF = s.csrfFor(r)
 	p.Notice = notices[q.Get("notice")]
 	p.Error = errNotices[q.Get("err")]

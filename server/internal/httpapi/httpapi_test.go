@@ -924,3 +924,99 @@ func TestAdminLocalOnlyLeavesRouterAPIPublic(t *testing.T) {
 		}
 	}
 }
+
+// The devlog CMS and the podkop panel share one login, and only the second half
+// is worth hiding. With EXTRAS_LOCAL_ONLY the CMS keeps answering on the public
+// hostname — the cover site has to stay writable — while clients, keys and the
+// live-state endpoint behind them are simply not there.
+func TestExtrasLocalOnlySplitsCMSFromPanel(t *testing.T) {
+	srv, _ := newTestServerWith(t, func(c *config.Config) { c.ExtrasLocalOnly = true })
+	cookie, _ := login(t, srv)
+
+	for _, tc := range []struct {
+		path      string
+		host      string
+		wantAllow bool
+	}{
+		{path: screenNews, host: "backfiregame.org", wantAllow: true},
+		{path: screenNews, host: "127.0.0.1:8080", wantAllow: true},
+		{path: screenClients, host: "backfiregame.org", wantAllow: false},
+		{path: screenClients, host: "127.0.0.1:8080", wantAllow: true},
+		{path: screenConfig, host: "backfiregame.org", wantAllow: false},
+		{path: screenLogs, host: "backfiregame.org", wantAllow: false},
+		{path: "api/state", host: "backfiregame.org", wantAllow: false},
+		{path: "api/state", host: "127.0.0.1:8080", wantAllow: true},
+	} {
+		t.Run(tc.path+"@"+tc.host, func(t *testing.T) {
+			rr := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, srv.cfg.AdminPath+tc.path, nil)
+			req.Host = tc.host
+			req.AddCookie(cookie)
+			srv.Handler().ServeHTTP(rr, req)
+
+			allowed := rr.Code == http.StatusOK
+			if allowed != tc.wantAllow {
+				t.Fatalf("status %d, allowed=%v want %v", rr.Code, allowed, tc.wantAllow)
+			}
+		})
+	}
+}
+
+// A mutation is not a screen, so gating GETs alone would leave the interesting
+// half open: issuing a key is a POST.
+func TestExtrasLocalOnlyBlocksMutations(t *testing.T) {
+	srv, _ := newTestServerWith(t, func(c *config.Config) { c.ExtrasLocalOnly = true })
+	cookie, csrf := login(t, srv)
+
+	for _, path := range []string{"clients/create", "clients/delete", "profiles/save", "config/drop-sessions"} {
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodPost, srv.cfg.AdminPath+path,
+			strings.NewReader("csrf="+csrf+"&name=x"))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		req.Host = "backfiregame.org"
+		req.AddCookie(cookie)
+		srv.Handler().ServeHTTP(rr, req)
+		if rr.Code != http.StatusNotFound {
+			t.Errorf("POST %s from the internet = %d, want 404", path, rr.Code)
+		}
+	}
+}
+
+// Off the local address the panel's menu entries have to point at the local one:
+// a link to a path that 404s here would be a dead end, and the client count next
+// to it would state a fact about the VPN on a public page.
+func TestExtrasNavPointsAtTheLocalAddress(t *testing.T) {
+	srv, st := newTestServerWith(t, func(c *config.Config) {
+		c.ExtrasLocalOnly = true
+		c.LocalURL = "http://127.0.0.1:8080"
+	})
+	if err := st.PutClient(&store.Client{Name: "r1", Token: "t1", ProxyString: "vless://u@h:443", Enabled: true}); err != nil {
+		t.Fatalf("PutClient: %v", err)
+	}
+	cookie, _ := login(t, srv)
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, srv.cfg.AdminPath+screenNews, nil)
+	req.Host = "backfiregame.org"
+	req.AddCookie(cookie)
+	srv.Handler().ServeHTTP(rr, req)
+	body := rr.Body.String()
+
+	want := "http://127.0.0.1:8080" + srv.cfg.AdminPath + screenClients
+	if !strings.Contains(body, want) {
+		t.Errorf("CLIENTS should link to %q", want)
+	}
+	if strings.Contains(body, `href="`+srv.cfg.AdminPath+screenClients+`"`) {
+		t.Errorf("CLIENTS should not link to the local path on a public host")
+	}
+
+	// Locally the menu is ordinary again, count and all.
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, srv.cfg.AdminPath+screenNews, nil)
+	req.Host = "127.0.0.1:8080"
+	req.AddCookie(cookie)
+	srv.Handler().ServeHTTP(rr, req)
+	if !strings.Contains(rr.Body.String(), `href="`+srv.cfg.AdminPath+screenClients+`"`) {
+		t.Errorf("CLIENTS should be an ordinary link on the local address")
+	}
+}

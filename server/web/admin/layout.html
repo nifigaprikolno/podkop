@@ -51,10 +51,18 @@
       {{end}}{{end}}
       <div class="nav-group">EXTRAS</div>
       {{range .Nav}}{{if eq .Section "extras"}}
+      {{if .Elsewhere}}
+      <a class="nav-item elsewhere" href="{{.Href}}" target="_blank" rel="noopener"
+         title="This screen answers on the local address only — open the tunnel first">
+        <span class="num">{{.Num}}</span><span class="label">{{.Label}}</span>
+        <span class="tag">↗</span>
+      </a>
+      {{else}}
       <a class="nav-item{{if .Active}} active{{end}}" href="{{.Href}}">
         <span class="num">{{.Num}}</span><span class="label">{{.Label}}</span>
         {{if .Tag}}<span class="tag">{{.Tag}}</span>{{end}}
       </a>
+      {{end}}
       {{end}}{{end}}
     </div>
 

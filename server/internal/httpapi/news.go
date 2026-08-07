@@ -13,7 +13,7 @@ import (
 // one being edited (?edit=<id>, or a blank form).
 func (s *Server) adminNews(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	p := s.newPage(screenNews)
+	p := s.newPageFor(r, screenNews)
 	p.CSRF = s.csrfFor(r)
 	p.Notice = notices[q.Get("notice")]
 	p.Error = errNotices[q.Get("err")]
