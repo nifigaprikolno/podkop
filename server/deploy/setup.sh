@@ -19,6 +19,7 @@ XUI_UI_BIND_VALUE="127.0.0.1"
 TRUSTED_PROXY_VALUE="true"
 PROFILES="tunnel,xui"
 BUILD="yes"
+NEW_ADMIN_PASSWORD=""
 
 usage() {
     cat <<'EOF'
@@ -28,6 +29,8 @@ Usage: ./setup.sh [options]
                       (leave unset to keep whatever .env already has)
   --xray-port N       port the Xray inbound listens on          (default 443)
   --profiles LIST     comma separated compose profiles          (default tunnel,xui)
+  --new-admin-password
+                      generate a new operator password and print it once
   --no-trusted-proxy  do not set PODKOP_SERVER_TRUSTED_PROXY=true
   --no-build          skip rebuilding the podkop-server image
   -h, --help          this text
@@ -42,6 +45,7 @@ while [ $# -gt 0 ]; do
         --xray-port=*) XRAY_PORT_VALUE="${1#*=}"; shift ;;
         --profiles) PROFILES="${2:?--profiles needs a value}"; shift 2 ;;
         --profiles=*) PROFILES="${1#*=}"; shift ;;
+        --new-admin-password) NEW_ADMIN_PASSWORD="yes"; shift ;;
         --no-trusted-proxy) TRUSTED_PROXY_VALUE=""; shift ;;
         --no-build) BUILD=""; shift ;;
         -h|--help) usage; exit 0 ;;
@@ -126,6 +130,8 @@ if [ -n "$FRESH_ENV" ]; then
     # The example ships placeholders that must not survive into a running
     # deployment: a guessable admin path and a literal CHANGE-ME password.
     set_kv PODKOP_SERVER_ADMIN_PATH "/manage-$(random_token 10)/"
+    set_kv PODKOP_SERVER_ADMIN_PASSWORD "$(random_token 32)"
+elif [ -n "$NEW_ADMIN_PASSWORD" ]; then
     set_kv PODKOP_SERVER_ADMIN_PASSWORD "$(random_token 32)"
 fi
 [ -n "$ADMIN_HOST" ] && set_kv PODKOP_SERVER_ADMIN_HOST "$ADMIN_HOST"
