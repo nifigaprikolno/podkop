@@ -5,16 +5,20 @@
 #
 #   ./subs.sh            list clients with their URLs
 #   ./subs.sh --check    ... and fetch each subscription, reporting the status
+#   ./subs.sh --links    print the stored proxy links with the UUID masked,
+#                        so they can be pasted into a bug report safely
 set -eu
 
 SELF_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
 ENV_FILE="$SELF_DIR/.env"
 CHECK=""
+LINKS=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --check) CHECK="yes"; shift ;;
-        -h|--help) sed -n '2,7p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        --links) LINKS="yes"; shift ;;
+        -h|--help) sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) printf 'unknown option: %s\n' "$1" >&2; exit 2 ;;
     esac
 done
@@ -65,6 +69,20 @@ for token, c in sorted(clients.items(), key=lambda kv: kv[1].get("name", "")):
         print("  !! no proxy link stored — the subscription would be empty")
     print()
 '
+
+if [ -n "$LINKS" ]; then
+    printf '=== stored proxy links (UUID masked) ===\n'
+    printf '%s' "$STORE" | python3 -c '
+import json, re, sys
+
+data = json.load(sys.stdin)
+for token, c in sorted((data.get("clients") or {}).items(), key=lambda kv: kv[1].get("name", "")):
+    link = c.get("proxy_string") or ""
+    # The UUID is the credential; everything after it is what needs reading.
+    link = re.sub(r"://[^@]*@", "://UUID-MASKED@", link)
+    print("%s:\n  %s\n" % (c.get("name", "?"), link or "(none stored)"))
+'
+fi
 
 [ -n "$CHECK" ] || exit 0
 
