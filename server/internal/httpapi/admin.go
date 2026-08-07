@@ -444,17 +444,29 @@ func (s *Server) issueXUIKey(ctx context.Context, name string) (link, email stri
 	if err := s.xui.Login(ctx); err != nil {
 		return "", "", err
 	}
+	// Read the inbound first: its transport decides whether the client may
+	// carry an XTLS flow, and the client has to be created with the same flow
+	// the link advertises.
+	in, err := s.xui.GetInbound(ctx, s.cfg.XUIInbound)
+	if err != nil {
+		return "", "", err
+	}
 	uuid, err := newUUID()
 	if err != nil {
 		return "", "", err
 	}
 	email = fmt.Sprintf("%s-%s", sanitizeEmail(name), mustToken(3))
 	cl := xui.NewClientSettings(uuid, email)
-	if err := s.xui.AddClient(ctx, s.cfg.XUIInbound, cl); err != nil {
-		return "", "", err
+	if s.cfg.XUIClientFlow != "" {
+		if in.SupportsFlow() {
+			cl.Flow = s.cfg.XUIClientFlow
+		} else {
+			network, _, _ := in.Network()
+			s.events.Warn("XUI", fmt.Sprintf(
+				"inbound %d uses %s, issuing the key without flow", s.cfg.XUIInbound, network))
+		}
 	}
-	in, err := s.xui.GetInbound(ctx, s.cfg.XUIInbound)
-	if err != nil {
+	if err := s.xui.AddClient(ctx, s.cfg.XUIInbound, cl); err != nil {
 		return "", "", err
 	}
 	link, err = s.xui.BuildVlessLink(in, cl)

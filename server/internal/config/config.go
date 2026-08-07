@@ -53,6 +53,10 @@ type Config struct {
 	XUIPassword   string
 	XUIInbound    int    // inbound id on which new clients are created
 	XUIPublicHost string // public host/IP to put into generated vless links
+	// XUIClientFlow is the XTLS flow new clients are created with, e.g.
+	// "xtls-rprx-vision". Applied only on TCP inbounds — Vision does not exist
+	// on gRPC or WebSocket, and a link carrying flow there does not connect.
+	XUIClientFlow string
 }
 
 func env(key, def string) string {
@@ -117,6 +121,15 @@ func Load() (*Config, error) {
 		XUIUsername:   env("XUI_USERNAME", ""),
 		XUIPassword:   env("XUI_PASSWORD", ""),
 		XUIPublicHost: env("XUI_PUBLIC_HOST", ""),
+		XUIClientFlow: strings.TrimSpace(env("XUI_CLIENT_FLOW", "")),
+	}
+
+	// A typo here would be silent: the key gets issued and simply never
+	// connects, so only known values are accepted.
+	switch c.XUIClientFlow {
+	case "", "xtls-rprx-vision", "xtls-rprx-vision-udp443":
+	default:
+		return nil, fmt.Errorf("invalid XUI_CLIENT_FLOW %q: expected empty, xtls-rprx-vision or xtls-rprx-vision-udp443", c.XUIClientFlow)
 	}
 
 	switch c.Root {

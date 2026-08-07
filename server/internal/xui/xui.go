@@ -184,7 +184,38 @@ type streamSettings struct {
 	} `json:"wsSettings"`
 	GRPC struct {
 		ServiceName string `json:"serviceName"`
+		// multiMode and authority must match on both ends: a client that omits
+		// mode=multi against a multiMode inbound simply fails to connect.
+		MultiMode bool   `json:"multiMode"`
+		Authority string `json:"authority"`
 	} `json:"grpcSettings"`
+}
+
+// Network reports the inbound's transport ("tcp" when unset) and its security
+// layer, so callers can decide what a client on it may use.
+func (in *Inbound) Network() (network, security string, err error) {
+	var ss streamSettings
+	if in.StreamSettings != "" {
+		if err := json.Unmarshal([]byte(in.StreamSettings), &ss); err != nil {
+			return "", "", fmt.Errorf("parse streamSettings: %w", err)
+		}
+	}
+	network = ss.Network
+	if network == "" {
+		network = "tcp"
+	}
+	return network, strings.ToLower(ss.Security), nil
+}
+
+// SupportsFlow reports whether a client on this inbound may carry an XTLS flow.
+// Vision is a TCP-only feature: setting flow on a gRPC or WebSocket inbound
+// produces a link that no client can use.
+func (in *Inbound) SupportsFlow() bool {
+	network, security, err := in.Network()
+	if err != nil {
+		return false
+	}
+	return network == "tcp" && (security == "reality" || security == "tls")
 }
 
 // BuildVlessLink assembles a vless:// link for the given client on an inbound.
@@ -211,7 +242,9 @@ func (c *Client) BuildVlessLink(in *Inbound, cl ClientSettings) (string, error) 
 		network = "tcp"
 	}
 	q.Set("type", network)
-	if cl.Flow != "" {
+	// Vision only exists on TCP; carrying flow on any other transport yields a
+	// link the client cannot connect with.
+	if cl.Flow != "" && network == "tcp" {
 		q.Set("flow", cl.Flow)
 	}
 
@@ -255,6 +288,12 @@ func (c *Client) BuildVlessLink(in *Inbound, cl ClientSettings) (string, error) 
 	case "grpc":
 		if ss.GRPC.ServiceName != "" {
 			q.Set("serviceName", ss.GRPC.ServiceName)
+		}
+		if ss.GRPC.MultiMode {
+			q.Set("mode", "multi")
+		}
+		if ss.GRPC.Authority != "" {
+			q.Set("authority", ss.GRPC.Authority)
 		}
 	}
 

@@ -99,6 +99,18 @@ VPS-панель для централизованного управления 
 | `XUI_USERNAME` / `XUI_PASSWORD` | — | Учётные данные 3x-UI. Пусто → ключи только вручную |
 | `XUI_INBOUND_ID` | — | ID inbound в 3x-UI для новых клиентов |
 | `XUI_PUBLIC_HOST` | host из `XUI_BASE_URL` | Хост/IP для генерируемых vless-ссылок |
+| `XUI_CLIENT_FLOW` | — | XTLS flow новых клиентов (`xtls-rprx-vision`). Применяется только на TCP-инбаундах |
+
+### Выдача ключей через 3x-UI
+
+Панель читает inbound, создаёт клиента и собирает `vless://`-ссылку из
+`type/security/sni/pbk/fp/sid/spx`, для gRPC добавляет `serviceName`, `mode` и
+`authority`, для TCP — `flow` из `XUI_CLIENT_FLOW`.
+
+Vision живёт только на TCP: если inbound gRPC или WebSocket, ключ выдаётся без
+`flow`, а на экране LOGS появляется предупреждение. Это не ошибка — ссылка
+рабочая, просто без ускорения. Для нестандартных транспортов всегда остаётся
+ручной режим: скопировать ссылку из 3x-UI и вставить в поле PROXY LINK.
 
 ## Развёртывание
 
