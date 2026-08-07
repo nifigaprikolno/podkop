@@ -164,8 +164,9 @@ case ",$PROFILES," in
         if [ -n "$creds" ]; then
             printf '%s\n' "$creds"
         else
-            printf '  nothing matched — the database already existed, or the image\n'
-            printf '  words it differently: check `docker compose logs 3x-ui` by hand.\n'
+            printf '  nothing matched — the first-run banner is gone from the log.\n'
+            printf '  Ask the container itself: ./xui-creds.sh (add --reset to set a\n'
+            printf '  new login if the old one is lost).\n'
         fi
         ;;
 esac

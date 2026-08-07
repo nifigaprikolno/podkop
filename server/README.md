@@ -211,8 +211,15 @@ cd ~/podkop && git pull && server/deploy/setup.sh --admin-host panel.example.com
 `docker compose --profile tunnel --profile xui up -d --build`.
 
 3x-UI при первом старте генерирует случайные учётные данные и случайный
-`webBasePath` — они видны только в логе, сохраните их сразу. Интерфейс наружу не
-смотрит, заходить через туннель с локальной машины:
+`webBasePath` и пишет их в лог ровно один раз. Если строка уже уехала —
+спросить у самого контейнера:
+
+```sh
+server/deploy/xui-creds.sh            # показать логин, порт и webBasePath
+server/deploy/xui-creds.sh --reset    # задать новый пароль, если старый утерян
+```
+
+Интерфейс наружу не смотрит, заходить через туннель с локальной машины:
 
 ```sh
 ssh -L 2053:127.0.0.1:2053 root@ВАШ_VPS
