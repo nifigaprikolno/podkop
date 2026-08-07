@@ -326,12 +326,18 @@ func TestRobotsAndNoIndex(t *testing.T) {
 		t.Errorf("robots.txt = %q, want everything disallowed by default", rr.Body.String())
 	}
 
-	// With indexing switched on, only the operator path stays closed.
+	// With indexing switched on the site opens up — but robots.txt must never
+	// name the operator path: the file is public, and a Disallow line would
+	// hand the secret path to anyone who reads it.
 	srv, _ = newTestServerWith(t, func(c *config.Config) { c.SiteIndexing = true })
 	rr = httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/robots.txt", nil))
-	if !strings.Contains(rr.Body.String(), "Disallow: /manage-secret/") {
-		t.Errorf("robots.txt = %q, want the admin path disallowed", rr.Body.String())
+	body := rr.Body.String()
+	if !strings.Contains(body, "Allow: /") {
+		t.Errorf("robots.txt = %q, want the site allowed", body)
+	}
+	if strings.Contains(body, "manage-secret") {
+		t.Errorf("robots.txt leaks the admin path: %q", body)
 	}
 
 	rr = httptest.NewRecorder()

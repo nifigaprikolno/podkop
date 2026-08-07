@@ -171,13 +171,16 @@ func (s *Server) mediaHandler() http.Handler {
 	})
 }
 
-// handleRobots keeps the operator area out of search results. The public site
-// is only opened for indexing when the deployment asks for it — a devlog nobody
-// links to is a weaker cover than one that is simply not crawled.
+// handleRobots states the crawling preference for the public site. The operator
+// area is never named here: robots.txt is world-readable, so a Disallow line
+// would publish the secret admin path to everyone who asks for the file — and
+// to every scraper that harvests robots.txt looking for exactly that. The area
+// is kept out of search results by the X-Robots-Tag header on its own
+// responses instead, which discloses nothing.
 func (s *Server) handleRobots(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	if s.cfg.SiteIndexing && s.cfg.Root == "site" {
-		_, _ = w.Write([]byte("User-agent: *\nDisallow: " + s.cfg.AdminPath + "\n"))
+		_, _ = w.Write([]byte("User-agent: *\nAllow: /\n"))
 		return
 	}
 	_, _ = w.Write([]byte("User-agent: *\nDisallow: /\n"))
