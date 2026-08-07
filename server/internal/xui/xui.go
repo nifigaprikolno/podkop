@@ -11,10 +11,13 @@ package xui
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -26,6 +29,9 @@ type Client struct {
 	user, pass string
 	publicHost string
 	http       *http.Client
+	// csrf is the token 3x-UI 3.6 wants on every POST. Empty against older
+	// panels, which have no such check and ignore the header.
+	csrf string
 }
 
 // New builds a client. publicHost is used as the server address in generated
@@ -58,22 +64,71 @@ type apiResp struct {
 	Obj     json.RawMessage `json:"obj"`
 }
 
+// csrfMeta finds the token 3x-UI 3.6 embeds in every page it serves.
+var csrfMeta = regexp.MustCompile(`name="csrf-token"\s+content="([^"]+)"`)
+
+// fetchCSRF loads the panel's entry page to pick up the CSRF token and the
+// session cookie that goes with it. 3x-UI 3.6 rejects a POST without the
+// matching pair with an empty 403 body; older panels simply have no token, and
+// an empty result here is not an error.
+func (c *Client) fetchCSRF(ctx context.Context) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+"/", nil)
+	if err != nil {
+		return
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return
+	}
+	if m := csrfMeta.FindSubmatch(body); m != nil {
+		c.csrf = string(m[1])
+	}
+}
+
+// do sends a request with the CSRF token attached and decodes the panel's
+// envelope. A non-JSON body is reported with its status code: 3x-UI answers a
+// rejected POST with an empty 403, and decoding that alone yields a bare "EOF"
+// that says nothing about what went wrong.
+func (c *Client) do(req *http.Request, what string) (*apiResp, error) {
+	if c.csrf != "" {
+		req.Header.Set("X-CSRF-Token", c.csrf)
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	if err != nil {
+		return nil, fmt.Errorf("%s: read response: %w", what, err)
+	}
+	var r apiResp
+	if err := json.Unmarshal(body, &r); err != nil {
+		if len(body) == 0 {
+			return nil, fmt.Errorf("%s: HTTP %d with an empty body", what, resp.StatusCode)
+		}
+		return nil, fmt.Errorf("%s: HTTP %d, unexpected response: %w", what, resp.StatusCode, err)
+	}
+	return &r, nil
+}
+
 // Login authenticates and stores the session cookie in the jar.
 func (c *Client) Login(ctx context.Context) error {
+	c.fetchCSRF(ctx)
 	form := url.Values{"username": {c.user}, "password": {c.pass}}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+"/login", strings.NewReader(form.Encode()))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := c.http.Do(req)
+	r, err := c.do(req, "login")
 	if err != nil {
 		return err
-	}
-	defer resp.Body.Close()
-	var r apiResp
-	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
-		return fmt.Errorf("login: decode response: %w", err)
 	}
 	if !r.Success {
 		return fmt.Errorf("login failed: %s", r.Msg)
@@ -98,7 +153,70 @@ func NewClientSettings(uuid, email string) ClientSettings {
 }
 
 // AddClient creates a new client on the given inbound.
+//
+// 3x-UI 3.6 made clients first-class objects and moved them out from under the
+// inbound: POST /panel/api/inbounds/addClient is gone and answers 404. Try the
+// current endpoint first and fall back to the old one, so the same binary keeps
+// working against panels that predate the move.
 func (c *Client) AddClient(ctx context.Context, inboundID int, cl ClientSettings) error {
+	err := c.addClientV36(ctx, inboundID, cl)
+	if err == nil || !isNotFound(err) {
+		return err
+	}
+	return c.addClientLegacy(ctx, inboundID, cl)
+}
+
+// errNotFound marks the 404 that tells the two API generations apart.
+type errNotFound struct{ err error }
+
+func (e errNotFound) Error() string { return e.err.Error() }
+func (e errNotFound) Unwrap() error { return e.err }
+
+func isNotFound(err error) bool {
+	var nf errNotFound
+	return errors.As(err, &nf)
+}
+
+// addClientV36 uses the 3.6 endpoint, which takes JSON and attaches one client
+// to a list of inbounds. The uuid and flow we send are kept as given — 3x-UI
+// only generates its own when they are omitted.
+func (c *Client) addClientV36(ctx context.Context, inboundID int, cl ClientSettings) error {
+	payload := map[string]any{
+		"client": map[string]any{
+			"email":      cl.Email,
+			"id":         cl.ID,
+			"flow":       cl.Flow,
+			"enable":     cl.Enable,
+			"totalGB":    cl.TotalGB,
+			"expiryTime": cl.ExpiryTime,
+			"subId":      cl.SubID,
+		},
+		"inboundIds": []int{inboundID},
+	}
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.base+"/panel/api/clients/add", strings.NewReader(string(body)))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	r, err := c.do(req, "addClient")
+	if err != nil {
+		if strings.Contains(err.Error(), "HTTP 404") {
+			return errNotFound{err}
+		}
+		return err
+	}
+	if !r.Success {
+		return fmt.Errorf("addClient failed: %s", r.Msg)
+	}
+	return nil
+}
+
+// addClientLegacy is the pre-3.6 form-encoded call, kept for older panels.
+func (c *Client) addClientLegacy(ctx context.Context, inboundID int, cl ClientSettings) error {
 	settings, err := json.Marshal(map[string]any{"clients": []ClientSettings{cl}})
 	if err != nil {
 		return err
@@ -112,14 +230,9 @@ func (c *Client) AddClient(ctx context.Context, inboundID int, cl ClientSettings
 		return err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := c.http.Do(req)
+	r, err := c.do(req, "addClient")
 	if err != nil {
 		return err
-	}
-	defer resp.Body.Close()
-	var r apiResp
-	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
-		return fmt.Errorf("addClient: decode response: %w", err)
 	}
 	if !r.Success {
 		return fmt.Errorf("addClient failed: %s", r.Msg)
@@ -168,14 +281,9 @@ func (c *Client) GetInbound(ctx context.Context, inboundID int) (*Inbound, error
 	if err != nil {
 		return nil, err
 	}
-	resp, err := c.http.Do(req)
+	r, err := c.do(req, "getInbound")
 	if err != nil {
 		return nil, err
-	}
-	defer resp.Body.Close()
-	var r apiResp
-	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
-		return nil, fmt.Errorf("getInbound: decode response: %w", err)
 	}
 	if !r.Success {
 		return nil, fmt.Errorf("getInbound failed: %s", r.Msg)
