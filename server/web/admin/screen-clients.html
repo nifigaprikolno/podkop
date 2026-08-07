@@ -93,9 +93,11 @@
       {{if not .EditClient}}
       <div class="field">
         <label>KEY SOURCE</label>
-        <div class="check"><input type="radio" name="mode" value="manual" checked id="mode-manual"><label for="mode-manual" style="margin:0">Paste a link manually</label></div>
+        {{/* With 3x-UI wired up, issuing is the path that works without
+             pasting anything, so it is the one preselected. */}}
+        <div class="check"><input type="radio" name="mode" value="manual" {{if not .XUIEnabled}}checked{{end}} id="mode-manual"><label for="mode-manual" style="margin:0">Paste a link manually</label></div>
         {{if .XUIEnabled}}
-        <div class="check"><input type="radio" name="mode" value="xui" id="mode-xui"><label for="mode-xui" style="margin:0">Issue one through 3x-UI</label></div>
+        <div class="check"><input type="radio" name="mode" value="xui" checked id="mode-xui"><label for="mode-xui" style="margin:0">Issue one through 3x-UI</label></div>
         {{end}}
       </div>
       {{end}}
