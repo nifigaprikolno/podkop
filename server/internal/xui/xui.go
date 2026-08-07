@@ -289,9 +289,13 @@ func (c *Client) BuildVlessLink(in *Inbound, cl ClientSettings) (string, error) 
 		if len(ss.Reality.ServerNames) > 0 {
 			q.Set("sni", ss.Reality.ServerNames[0])
 		}
-		if ss.Reality.Settings.PublicKey != "" {
-			q.Set("pbk", ss.Reality.Settings.PublicKey)
+		// Without the key pair there is nothing for the client to authenticate
+		// against: the link would look complete and fail at the handshake, so
+		// refuse to issue it and say what is missing.
+		if ss.Reality.Settings.PublicKey == "" {
+			return "", fmt.Errorf("inbound %d has no Reality public key — generate the key pair in 3x-UI", in.ID)
 		}
+		q.Set("pbk", ss.Reality.Settings.PublicKey)
 		if fp := ss.Reality.Settings.Fingerprint; fp != "" {
 			q.Set("fp", fp)
 		} else {

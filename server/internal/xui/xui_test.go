@@ -120,7 +120,8 @@ func TestBuildVlessLinkDropsFlowOffTCP(t *testing.T) {
 	c := newTestClient(t)
 	in := &Inbound{
 		ID: 3, Port: 443, Protocol: "vless",
-		StreamSettings: `{"network":"grpc","security":"reality","grpcSettings":{"serviceName":"/x"}}`,
+		StreamSettings: `{"network":"grpc","security":"reality","grpcSettings":{"serviceName":"/x"},
+			"realitySettings":{"settings":{"publicKey":"pk"}}}`,
 	}
 	cl := NewClientSettings("uuid-3", "router-c")
 	cl.Flow = "xtls-rprx-vision"
@@ -257,5 +258,27 @@ func TestBuildVlessLinkTreatsRawAsTCP(t *testing.T) {
 	}
 	if !strings.Contains(link, "flow=xtls-rprx-vision") {
 		t.Errorf("Vision was dropped off a transport that supports it:\n%s", link)
+	}
+}
+
+// 3x-UI happily saves a Reality inbound with an empty key pair when the
+// operator skips the generate button. A link built from it carries no pbk and
+// cannot connect, so issuing must fail loudly instead.
+func TestBuildVlessLinkRefusesRealityWithoutKeys(t *testing.T) {
+	c := &Client{publicHost: "144.31.12.79"}
+	in := &Inbound{
+		ID: 1, Port: 443, Protocol: "vless",
+		Settings: `{"clients":[],"decryption":"none","encryption":"none"}`,
+		StreamSettings: `{"network":"tcp","security":"reality",
+			"realitySettings":{"target":"www.samsung.com:443","serverNames":["www.samsung.com"],
+				"privateKey":"","shortIds":["50ca3755"],
+				"settings":{"publicKey":"","fingerprint":"firefox","spiderX":"/"}}}`,
+	}
+	_, err := c.BuildVlessLink(in, ClientSettings{ID: "uuid-4", Flow: "xtls-rprx-vision"})
+	if err == nil {
+		t.Fatal("a Reality inbound without a key pair must not yield a link")
+	}
+	if !strings.Contains(err.Error(), "Reality public key") {
+		t.Errorf("error should name the missing key pair, got: %v", err)
 	}
 }
