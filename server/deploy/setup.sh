@@ -64,57 +64,7 @@ random_token() {
     LC_ALL=C tr -dc 'A-Za-z0-9' </dev/urandom | dd bs=1 count="$1" 2>/dev/null
 }
 
-get_kv() {
-    KEY="$1" awk '
-        BEGIN { key = ENVIRON["KEY"]; value = "" }
-        {
-            line = $0
-            sub(/^[ \t]+/, "", line)
-            if (index(line, key "=") == 1) { value = substr(line, length(key) + 2) }
-        }
-        END { print value }
-    ' "$ENV_FILE"
-}
-
-CHANGED=""
-BACKED_UP=""
-
-set_kv() {
-    key="$1"
-    value="$2"
-
-    if [ "$(get_kv "$key")" = "$value" ]; then
-        printf '  unchanged  %s\n' "$key"
-        return 0
-    fi
-
-    if [ -z "$BACKED_UP" ]; then
-        cp -p "$ENV_FILE" "$ENV_FILE.bak"
-        BACKED_UP="yes"
-    fi
-
-    tmp=$(mktemp "$ENV_FILE.XXXXXX")
-    chmod 600 "$tmp"
-    # Replaces the first occurrence whether it is live or commented out, and
-    # appends when the key is absent entirely.
-    KEY="$key" VALUE="$value" awk '
-        BEGIN { key = ENVIRON["KEY"]; value = ENVIRON["VALUE"]; done = 0 }
-        {
-            probe = $0
-            sub(/^[ \t]*#*[ \t]*/, "", probe)
-            if (index(probe, key "=") == 1) {
-                if (!done) { print key "=" value; done = 1 }
-                next
-            }
-            print
-        }
-        END { if (!done) print key "=" value }
-    ' "$ENV_FILE" >"$tmp"
-    mv "$tmp" "$ENV_FILE"
-
-    printf '  set        %s=%s\n' "$key" "$value"
-    CHANGED="yes"
-}
+. "$SELF_DIR/env-kv.sh"
 
 FRESH_ENV=""
 if [ ! -f "$ENV_FILE" ]; then
@@ -138,7 +88,7 @@ fi
 [ -n "$TRUSTED_PROXY_VALUE" ] && set_kv PODKOP_SERVER_TRUSTED_PROXY "$TRUSTED_PROXY_VALUE"
 set_kv XRAY_PORT "$XRAY_PORT_VALUE"
 set_kv XUI_UI_BIND "$XUI_UI_BIND_VALUE"
-[ -n "$CHANGED" ] && printf '\nPrevious .env kept as %s.bak\n' "$ENV_FILE"
+[ -n "$ENV_KV_CHANGED" ] && printf '\nPrevious .env kept as %s.bak\n' "$ENV_FILE"
 
 # cloudflared exits immediately without a token, which is a confusing way to
 # find out that .env is incomplete.

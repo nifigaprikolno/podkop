@@ -7,21 +7,29 @@
 #   ./xui-creds.sh                       show current settings
 #   ./xui-creds.sh --reset               set a new random username/password
 #   ./xui-creds.sh --reset --user NAME   ... with a username of your choosing
+#   ./xui-creds.sh --reset --no-wire     ... without touching .env
+#
+# A reset also teaches the panel the new login, so key issuance keeps working.
 set -eu
 
 SELF_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
+ENV_FILE="$SELF_DIR/.env"
 RESET=""
 USERNAME="admin"
+WIRE="yes"
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --reset) RESET="yes"; shift ;;
         --user) USERNAME="${2:?--user needs a value}"; shift 2 ;;
         --user=*) USERNAME="${1#*=}"; shift ;;
-        -h|--help) sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        --no-wire) WIRE=""; shift ;;
+        -h|--help) sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) printf 'unknown option: %s\n' "$1" >&2; exit 2 ;;
     esac
 done
+
+. "$SELF_DIR/env-kv.sh"
 
 die() { printf 'xui-creds: %s\n' "$*" >&2; exit 1; }
 
@@ -76,6 +84,51 @@ fi
 printf '\nCurrent settings:\n'
 settings=$(compose exec -T 3x-ui "$XUI" setting -show 2>&1 || true)
 printf '%s\n' "$settings"
+
+# Everything 3x-UI serves, API included, lives under webBasePath — so the panel
+# has to be told the path, not just the port, or key issuance 404s the moment
+# the path stops being "/".
+BASE_PATH=$(printf '%s\n' "$settings" | sed -n 's/^[ \t]*webBasePath: *//p' | head -1)
+case "$BASE_PATH" in
+    "" | "/") XUI_URL="http://3x-ui:2053" ;;
+    *) XUI_URL="http://3x-ui:2053/${BASE_PATH#/}"; XUI_URL="${XUI_URL%/}" ;;
+esac
+
+if [ -n "$RESET" ] && [ -n "$WIRE" ]; then
+    if [ ! -f "$ENV_FILE" ]; then
+        printf '\nNo .env next to this script — skipping the panel wiring.\n'
+    else
+        printf '\nTeaching the panel the new login:\n'
+        set_kv XUI_USERNAME "$USERNAME"
+        set_kv XUI_PASSWORD "$NEW_PASSWORD"
+        set_kv XUI_BASE_URL "$XUI_URL"
+
+        # Links are useless without an address clients can dial. A domain
+        # fronted by the tunnel would send them to Cloudflare, so this is the
+        # raw address of the VPS.
+        current_host=$(get_kv XUI_PUBLIC_HOST)
+        case "$current_host" in
+            "" | your-domain.example)
+                detected=$(curl -fsS --max-time 5 https://api.ipify.org 2>/dev/null || true)
+                if [ -n "$detected" ]; then
+                    set_kv XUI_PUBLIC_HOST "$detected"
+                else
+                    printf '  XUI_PUBLIC_HOST is unset and the address could not be\n'
+                    printf '  detected — set it to the IP of this VPS by hand.\n'
+                fi
+                ;;
+        esac
+
+        if [ -n "$ENV_KV_CHANGED" ]; then
+            printf '\nPrevious .env kept as %s.bak\n' "$ENV_FILE"
+            # Environment is fixed when a container is created, so restart
+            # would keep serving the old values.
+            printf 'Recreating the panel so it picks the values up...\n'
+            compose up -d podkop-server >/dev/null
+        fi
+        printf 'Check it on the panel: CONFIG screen, XUI line.\n'
+    fi
+fi
 
 case "$settings" in
     *hasDefaultCredential:\ true*)

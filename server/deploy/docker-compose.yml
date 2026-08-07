@@ -35,7 +35,9 @@ services:
     environment:
       PODKOP_SERVER_LISTEN: ":8080"
       PODKOP_SERVER_STORE: "/var/lib/podkop-server/store.json"
-      XUI_BASE_URL: "http://3x-ui:2053"
+      # Overridable from .env: once 3x-UI gets a webBasePath, its API moves
+      # under that path too, and the panel needs the full prefix.
+      XUI_BASE_URL: "${XUI_BASE_URL:-http://3x-ui:2053}"
     volumes:
       - podkop_data:/var/lib/podkop-server
     networks:
