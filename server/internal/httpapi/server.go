@@ -11,6 +11,7 @@ import (
 	"html/template"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -186,8 +187,15 @@ func (s *Server) handleRobots(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte("User-agent: *\nDisallow: /\n"))
 }
 
-// handleRoot serves whatever the deployment put at the public root.
+// handleRoot serves whatever the deployment put at the public root — unless the
+// request arrived on the dedicated operator hostname, which goes to the panel.
 func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
+	if s.isAdminHost(r) {
+		s.noIndex(w)
+		http.Redirect(w, r, s.cfg.AdminPath, http.StatusSeeOther)
+		return
+	}
+
 	switch s.cfg.Root {
 	case "decoy":
 		s.handleDecoy(w, r)
@@ -197,6 +205,25 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 	default:
 		s.handleSite(w, r)
 	}
+}
+
+// isAdminHost reports whether the request came in on the operator hostname.
+// The forwarded header is honoured only behind a trusted proxy: otherwise a
+// spoofed header would hand the secret admin path to anyone who asks.
+func (s *Server) isAdminHost(r *http.Request) bool {
+	if s.cfg.AdminHost == "" {
+		return false
+	}
+	host := r.Host
+	if s.cfg.TrustedProxy {
+		if fh := r.Header.Get("X-Forwarded-Host"); fh != "" {
+			host = fh
+		}
+	}
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	return strings.EqualFold(host, s.cfg.AdminHost)
 }
 
 // noIndex marks a response as off-limits for crawlers.

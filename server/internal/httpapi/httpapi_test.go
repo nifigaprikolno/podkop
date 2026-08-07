@@ -667,3 +667,63 @@ func TestProfilePullIsRecordedAndDrivesDrift(t *testing.T) {
 		t.Errorf("routing screen does not report the drift")
 	}
 }
+
+// A dedicated operator hostname sends its root to the panel instead of the
+// cover site — otherwise the panel's own domain shows the devlog and the
+// operator has to remember the secret path.
+func TestAdminHostRootGoesToPanel(t *testing.T) {
+	srv, _ := newTestServerWith(t, func(c *config.Config) { c.AdminHost = "panel.example.com" })
+	h := srv.Handler()
+
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Host = "panel.example.com"
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusSeeOther {
+		t.Fatalf("admin host root: code = %d, want 303", rr.Code)
+	}
+	if got := rr.Header().Get("Location"); got != "/manage-secret/" {
+		t.Errorf("Location = %q, want the admin path", got)
+	}
+	if got := rr.Header().Get("X-Robots-Tag"); !strings.Contains(got, "noindex") {
+		t.Errorf("X-Robots-Tag = %q, want noindex on the operator entrance", got)
+	}
+
+	// The public hostname keeps serving the site.
+	rr = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Host = "example.com"
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK || !strings.Contains(rr.Body.String(), "Backfire") {
+		t.Errorf("public host: code = %d, want the site", rr.Code)
+	}
+}
+
+// Without a trusted proxy the forwarded host is ignored: honouring it would let
+// anyone reveal the secret admin path by setting a header.
+func TestAdminHostIgnoresUntrustedForwardedHost(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		trusted  bool
+		wantCode int
+	}{
+		{"direct", false, http.StatusOK},
+		{"behind proxy", true, http.StatusSeeOther},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, _ := newTestServerWith(t, func(c *config.Config) {
+				c.AdminHost = "panel.example.com"
+				c.TrustedProxy = tc.trusted
+			})
+			rr := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			req.Host = "example.com"
+			req.Header.Set("X-Forwarded-Host", "panel.example.com")
+			srv.Handler().ServeHTTP(rr, req)
+			if rr.Code != tc.wantCode {
+				t.Errorf("code = %d, want %d", rr.Code, tc.wantCode)
+			}
+		})
+	}
+}

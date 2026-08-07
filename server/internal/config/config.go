@@ -23,6 +23,11 @@ type Config struct {
 	// AdminUser / AdminPassword authenticate the operator on the admin panel.
 	AdminUser     string
 	AdminPassword string
+	// AdminHost, when set, turns that hostname into the operator entrance: its
+	// root goes to the panel instead of the cover site. Meant for a hostname
+	// that already sits behind Cloudflare Access or similar — reaching it is
+	// enough to learn the secret path.
+	AdminHost string
 
 	// DecoyDir optionally overrides the built-in decoy site with a custom one.
 	DecoyDir string
@@ -117,6 +122,7 @@ func Load() (*Config, error) {
 		StorePath:     env("PODKOP_SERVER_STORE", "/var/lib/podkop-server/store.json"),
 		AdminPath:     env("PODKOP_SERVER_ADMIN_PATH", "/manage/"),
 		AdminUser:     env("PODKOP_SERVER_ADMIN_USER", "admin"),
+		AdminHost:     strings.ToLower(strings.TrimSpace(env("PODKOP_SERVER_ADMIN_HOST", ""))),
 		AdminPassword: env("PODKOP_SERVER_ADMIN_PASSWORD", ""),
 		DecoyDir:      env("PODKOP_SERVER_DECOY_DIR", ""),
 		Root:          strings.ToLower(strings.TrimSpace(env("PODKOP_SERVER_ROOT", "site"))),
