@@ -194,12 +194,21 @@ CGO_ENABLED=0 GOARCH=arm64 go build \
 Порядок, если нужен просто рабочий VLESS на устройство:
 
 ```sh
-cd ~/podkop && git pull
-cd server/deploy
-# в .env: XRAY_PORT=443 (или другой, если 443 занят), XUI_UI_BIND=127.0.0.1
-docker compose --profile tunnel --profile xui up -d
-docker compose logs 3x-ui | head -40      # логин, пароль и webBasePath первого запуска
+cd ~/podkop && git pull && server/deploy/setup.sh --admin-host panel.example.com
 ```
+
+`setup.sh` правит `.env` сам (идемпотентно: повторный запуск пишет
+«unchanged», а не вторую строку), поднимает профили `tunnel` и `xui`,
+пересобирает панель и печатает учётные данные 3x-UI первого запуска вместе со
+списком портов, открытых наружу. Полезные ключи: `--xray-port` (если 443
+занят), `--profiles`, `--no-build`, `--no-trusted-proxy`. Прежний `.env`
+сохраняется рядом как `.env.bak`. Если `.env` ещё нет, он заводится из
+примера, а секретный путь и пароль генерируются и показываются один раз.
+
+Правки, которые скрипт вносит, при желании делаются и руками — это
+`PODKOP_SERVER_ADMIN_HOST`, `PODKOP_SERVER_TRUSTED_PROXY=true`, `XRAY_PORT` и
+`XUI_UI_BIND` — после чего
+`docker compose --profile tunnel --profile xui up -d --build`.
 
 3x-UI при первом старте генерирует случайные учётные данные и случайный
 `webBasePath` — они видны только в логе, сохраните их сразу. Интерфейс наружу не
