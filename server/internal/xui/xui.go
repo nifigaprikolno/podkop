@@ -134,6 +134,32 @@ type Inbound struct {
 	Protocol       string `json:"protocol"`
 	Remark         string `json:"remark"`
 	StreamSettings string `json:"streamSettings"`
+	// Settings carries the protocol settings blob, which since VLESS Encryption
+	// is where the value clients must echo back lives.
+	Settings string `json:"settings"`
+}
+
+// inboundSettings is the subset of an inbound's protocol settings we parse.
+type inboundSettings struct {
+	// Encryption is what a client has to send. Empty or "none" on a plain
+	// VLESS inbound, a long mlkem768x25519plus… string once the operator turns
+	// VLESS Encryption on — and a client that keeps sending "none" against
+	// such an inbound is rejected at the handshake.
+	Encryption string `json:"encryption"`
+}
+
+// clientEncryption reports the value a client link must carry.
+func (in *Inbound) clientEncryption() string {
+	var s inboundSettings
+	if in.Settings != "" {
+		if err := json.Unmarshal([]byte(in.Settings), &s); err != nil {
+			return "none"
+		}
+	}
+	if e := strings.TrimSpace(s.Encryption); e != "" {
+		return e
+	}
+	return "none"
 }
 
 // GetInbound fetches an inbound by id.
@@ -242,6 +268,9 @@ func (c *Client) BuildVlessLink(in *Inbound, cl ClientSettings) (string, error) 
 		network = "tcp"
 	}
 	q.Set("type", network)
+	// Stated explicitly rather than left to the client's default: with VLESS
+	// Encryption in play the value is no longer always "none".
+	q.Set("encryption", in.clientEncryption())
 	// Vision only exists on TCP; carrying flow on any other transport yields a
 	// link the client cannot connect with.
 	if cl.Flow != "" && network == "tcp" {

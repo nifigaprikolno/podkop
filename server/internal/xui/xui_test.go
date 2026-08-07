@@ -170,3 +170,60 @@ func TestBuildVlessLinkRejectsNonVless(t *testing.T) {
 		t.Error("expected an error for a non-vless inbound")
 	}
 }
+
+// A real 3x-UI inbound with VLESS Encryption turned on: the client has to echo
+// the settings.encryption value back, and a link that quietly says "none"
+// is refused at the handshake.
+func TestBuildVlessLinkCarriesVlessEncryption(t *testing.T) {
+	c := &Client{publicHost: "144.31.12.79"}
+	in := &Inbound{
+		ID: 1, Port: 443, Protocol: "vless", Remark: "in-443-tcp",
+		Settings: `{"clients":[],
+			"decryption":"mlkem768x25519plus.native.600s.6E65mKkV2QkM5HO6A5iAojpcQsawkEYwoj-Cvwm2GW8",
+			"encryption":"mlkem768x25519plus.native.0rtt.aC0--LIz2SIWHBdyhpU69Rzj5bIaoKUjn-Sm4s6oKFY"}`,
+		StreamSettings: `{"network":"grpc","security":"reality",
+			"grpcSettings":{"serviceName":"","authority":"","multiMode":true},
+			"realitySettings":{"serverNames":["www.samsung.com","cdn.samsung.com"],
+				"shortIds":["bd5f","3223b3"],
+				"settings":{"publicKey":"xvacW2GRcQI3GmRBWn91GUG6_C6knlY3rCcwXy4hQXU",
+					"fingerprint":"firefox","spiderX":"/nrorm2W9oSixIbQ"}}}`,
+	}
+
+	link, err := c.BuildVlessLink(in, ClientSettings{ID: "uuid-1", Email: "phone", Flow: "xtls-rprx-vision"})
+	if err != nil {
+		t.Fatalf("BuildVlessLink: %v", err)
+	}
+
+	for _, want := range []string{
+		"encryption=mlkem768x25519plus.native.0rtt.aC0--LIz2SIWHBdyhpU69Rzj5bIaoKUjn-Sm4s6oKFY",
+		"type=grpc", "mode=multi", "security=reality",
+		"sni=www.samsung.com", "fp=firefox", "sid=bd5f",
+	} {
+		if !strings.Contains(link, want) {
+			t.Errorf("link is missing %q:\n%s", want, link)
+		}
+	}
+	// Vision is TCP-only; a gRPC link carrying flow does not connect.
+	if strings.Contains(link, "flow=") {
+		t.Errorf("flow leaked onto a gRPC link:\n%s", link)
+	}
+}
+
+func TestBuildVlessLinkDefaultsEncryptionToNone(t *testing.T) {
+	c := &Client{publicHost: "example.test"}
+	in := &Inbound{
+		ID: 1, Port: 443, Protocol: "vless",
+		Settings:       `{"clients":[],"decryption":"none"}`,
+		StreamSettings: `{"network":"tcp","security":"reality","realitySettings":{"serverNames":["a.example"],"shortIds":["ab"],"settings":{"publicKey":"pk"}}}`,
+	}
+	link, err := c.BuildVlessLink(in, ClientSettings{ID: "uuid-2", Flow: "xtls-rprx-vision"})
+	if err != nil {
+		t.Fatalf("BuildVlessLink: %v", err)
+	}
+	if !strings.Contains(link, "encryption=none") {
+		t.Errorf("plain inbound should state encryption=none:\n%s", link)
+	}
+	if !strings.Contains(link, "flow=xtls-rprx-vision") {
+		t.Errorf("TCP inbound should keep the flow:\n%s", link)
+	}
+}
