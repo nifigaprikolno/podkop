@@ -87,6 +87,23 @@ services:
       - "host.docker.internal:host-gateway"
     networks: [internal]
 
+  # Static assets for the devlog, served through the tunnel — the images and
+  # video that are too big to ship inside the binary. Cloudflare caches them at
+  # its edge, and because this hostname stays proxied (orange cloud) a reader
+  # loading a post never connects to the VPS: the origin address is not exposed
+  # to every visitor the way a grey-cloud asset host would expose it.
+  #
+  # Route it in the tunnel as media.example.com → http://media:80.
+  media:
+    image: nginx:1.27-alpine
+    profiles: ["media"]
+    restart: unless-stopped
+    volumes:
+      - ./media.conf:/etc/nginx/conf.d/default.conf:ro
+      - ${MEDIA_DIR:-./media-files}:/srv/media:ro
+    networks: [internal]
+    # No ports: the tunnel reaches it over the compose network by name.
+
   3x-ui:
     image: ghcr.io/mhsanaei/3x-ui:latest
     profiles: ["xui"]
