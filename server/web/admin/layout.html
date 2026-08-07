@@ -97,8 +97,8 @@
 (function () {
   var screen = {{.Screen}}, base = {{.AdminPath}}, level = {{.LogLevel}};
   function text(el, value) { if (el && el.textContent !== value) el.textContent = value; }
-  function poll() {
-    fetch(base + "api/state?screen=" + screen + "&level=" + encodeURIComponent(level || ""), { credentials: "same-origin" })
+  function poll(signal) {
+    return fetch(base + "api/state?screen=" + screen + "&level=" + encodeURIComponent(level || ""), { credentials: "same-origin", signal: signal })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (s) {
         if (!s) return;
@@ -128,7 +128,22 @@
       })
       .catch(function () { /* a failed poll just means the next one tries again */ });
   }
-  setInterval(poll, 3000);
+  // One request at a time. setInterval fired every 3s no matter what, so a
+  // stalled tunnel let a dozen identical polls queue up and land together the
+  // moment it recovered; the next poll is now scheduled only once the previous
+  // one has settled, and a poll that outlives its slot is abandoned. A hidden
+  // tab does not need fresh numbers at all — it catches up when it comes back.
+  var timer = null;
+  function schedule(delay) { clearTimeout(timer); timer = setTimeout(tick, delay); }
+  function tick() {
+    if (document.hidden) { schedule(3000); return; }
+    var ctl = window.AbortController ? new AbortController() : null;
+    var giveUp = setTimeout(function () { if (ctl) ctl.abort(); }, 10000);
+    var again = function () { clearTimeout(giveUp); schedule(3000); };
+    poll(ctl && ctl.signal).then(again, again);
+  }
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) schedule(0); });
+  schedule(3000);
 })();
 </script>
 {{end}}
