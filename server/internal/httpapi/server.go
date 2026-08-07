@@ -287,6 +287,39 @@ func (s *Server) isAdminHost(r *http.Request) bool {
 	return strings.EqualFold(host, s.cfg.AdminHost)
 }
 
+// adminReachable reports whether the operator area answers on this request's
+// hostname. With AdminLocalOnly off it answers everywhere, which is the old
+// behaviour; with it on, only a loopback Host — an SSH tunnel to the VPS — and
+// AdminHost get through.
+//
+// The decision is on the Host rather than the peer address on purpose: the
+// server usually runs in a container, so a request forwarded from a loopback
+// port on the host arrives from the bridge gateway and never looks local.
+// A forged Host cannot help an attacker here, because a request that reaches
+// this process through Cloudflare carries the hostname the tunnel routed it to,
+// and that hostname is what the check reads.
+func (s *Server) adminReachable(r *http.Request) bool {
+	if !s.cfg.AdminLocalOnly {
+		return true
+	}
+	if s.isAdminHost(r) {
+		return true
+	}
+	// A request that came through Cloudflare is not local whatever it claims.
+	if r.Header.Get("CF-Ray") != "" || r.Header.Get("CF-Connecting-IP") != "" {
+		return false
+	}
+	host := r.Host
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	switch strings.ToLower(host) {
+	case "localhost", "127.0.0.1", "::1", "[::1]":
+		return true
+	}
+	return false
+}
+
 // noIndex marks a response as off-limits for crawlers.
 func (s *Server) noIndex(w http.ResponseWriter) {
 	w.Header().Set("X-Robots-Tag", "noindex, nofollow, noarchive")

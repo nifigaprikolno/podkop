@@ -37,6 +37,16 @@ type Config struct {
 	// enough to learn the secret path.
 	AdminHost string
 
+	// AdminLocalOnly takes the operator area off the internet: it then answers
+	// only on a loopback Host — that is, through an SSH tunnel to the VPS — and
+	// on AdminHost when one is set. Everything else gets the site's own 404, so
+	// the secret path is not confirmed to exist.
+	//
+	// Without it the operator area answers on every hostname the server is
+	// reached by, including the public one. A hostname behind Cloudflare Access
+	// therefore protects only itself: the same path stays open on the apex.
+	AdminLocalOnly bool
+
 	// DecoyDir optionally overrides the built-in decoy site with a custom one.
 	DecoyDir string
 
@@ -130,7 +140,8 @@ func Load() (*Config, error) {
 		StorePath:     env("PODKOP_SERVER_STORE", "/var/lib/podkop-server/store.json"),
 		AdminPath:     env("PODKOP_SERVER_ADMIN_PATH", "/manage/"),
 		AdminUser:     env("PODKOP_SERVER_ADMIN_USER", "admin"),
-		AdminHost:     strings.ToLower(strings.TrimSpace(env("PODKOP_SERVER_ADMIN_HOST", ""))),
+		AdminHost:      strings.ToLower(strings.TrimSpace(env("PODKOP_SERVER_ADMIN_HOST", ""))),
+		AdminLocalOnly: envBool("PODKOP_SERVER_ADMIN_LOCAL_ONLY", false),
 		PublicURL:     strings.TrimRight(strings.TrimSpace(env("PODKOP_SERVER_PUBLIC_URL", "")), "/"),
 		AdminPassword: env("PODKOP_SERVER_ADMIN_PASSWORD", ""),
 		DecoyDir:      env("PODKOP_SERVER_DECOY_DIR", ""),

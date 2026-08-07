@@ -588,6 +588,7 @@ func (s *Server) envRows() []kvRow {
 		{Label: "LISTEN", Value: s.cfg.Listen},
 		{Label: "ROOT", Value: s.cfg.Root},
 		{Label: "ADMIN PATH", Value: s.cfg.AdminPath},
+		{Label: "ADMIN REACH", Value: adminReachLabel(s.cfg.AdminLocalOnly, s.cfg.AdminHost)},
 		{Label: "ADMIN USER", Value: s.cfg.AdminUser},
 		{Label: "ADMIN PASSWORD", Value: mask(s.cfg.AdminPassword)},
 		{Label: "SESSION TTL", Value: s.cfg.SessionTTL.String()},
@@ -644,6 +645,19 @@ func boolLabel(v bool, yes, no string) string {
 		return yes
 	}
 	return no
+}
+
+// adminReachLabel spells out where the operator area answers, because "which
+// hostnames can reach this login form" is the one config value worth being able
+// to read off the screen rather than infer from two separate rows.
+func adminReachLabel(localOnly bool, adminHost string) string {
+	if !localOnly {
+		return "ANY HOSTNAME"
+	}
+	if adminHost != "" {
+		return "LOOPBACK + " + strings.ToUpper(adminHost)
+	}
+	return "LOOPBACK ONLY"
 }
 
 func formatDate(t time.Time) string {

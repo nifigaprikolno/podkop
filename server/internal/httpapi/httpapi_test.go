@@ -845,3 +845,82 @@ func TestClientLinksIgnoreUntrustedForwardedHost(t *testing.T) {
 		t.Error("a spoofed X-Forwarded-Host reached the generated links")
 	}
 }
+
+// With the operator area taken off the internet, only a loopback Host reaches
+// it — that is what an SSH tunnel to the VPS presents. A public hostname must
+// get the site's own 404 rather than a login form, and rather than any answer
+// that tells the caller the guessed path was right.
+func TestAdminLocalOnlyGate(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		host      string
+		cfHeaders bool
+		adminHost string
+		wantLogin bool
+	}{
+		{name: "loopback reaches the panel", host: "127.0.0.1:8080", wantLogin: true},
+		{name: "localhost reaches the panel", host: "localhost:8080", wantLogin: true},
+		{name: "ipv6 loopback reaches the panel", host: "[::1]:8080", wantLogin: true},
+		{name: "public hostname does not", host: "backfiregame.org", wantLogin: false},
+		{name: "admin host still does", host: "panel.example.com", adminHost: "panel.example.com", wantLogin: true},
+		// Cloudflare rewrites Host to whatever the tunnel route says, but a
+		// loopback Host arriving with Cloudflare's own headers is not local.
+		{name: "loopback claimed through cloudflare does not", host: "127.0.0.1:8080", cfHeaders: true, wantLogin: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv, _ := newTestServerWith(t, func(c *config.Config) {
+				c.AdminLocalOnly = true
+				c.AdminHost = tc.adminHost
+			})
+			rr := httptest.NewRecorder()
+			req := httptest.NewRequest(http.MethodGet, srv.cfg.AdminPath, nil)
+			req.Host = tc.host
+			if tc.cfHeaders {
+				req.Header.Set("CF-Ray", "a278cc870ccc95a4-FRA")
+				req.Header.Set("CF-Connecting-IP", "203.0.113.7")
+			}
+			srv.Handler().ServeHTTP(rr, req)
+
+			body := rr.Body.String()
+			gotLogin := strings.Contains(body, "OPERATOR ACCESS")
+			if gotLogin != tc.wantLogin {
+				t.Fatalf("login form shown = %v, want %v (status %d)", gotLogin, tc.wantLogin, rr.Code)
+			}
+			if !tc.wantLogin && rr.Code != http.StatusNotFound {
+				t.Fatalf("status = %d, want 404 so the secret path is not confirmed", rr.Code)
+			}
+		})
+	}
+}
+
+// The gate is off by default: an existing deployment that upgrades must not
+// lose its panel because a new option defaulted to on.
+func TestAdminReachableByDefault(t *testing.T) {
+	srv, _ := newTestServerWith(t, func(c *config.Config) {})
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, srv.cfg.AdminPath, nil)
+	req.Host = "backfiregame.org"
+	srv.Handler().ServeHTTP(rr, req)
+	if !strings.Contains(rr.Body.String(), "OPERATOR ACCESS") {
+		t.Fatalf("panel unreachable with the gate off (status %d)", rr.Code)
+	}
+}
+
+// The router-facing endpoints must stay public whatever the gate says: a router
+// fetching its profile has no loopback Host and no way to get one.
+func TestAdminLocalOnlyLeavesRouterAPIPublic(t *testing.T) {
+	srv, st := newTestServerWith(t, func(c *config.Config) { c.AdminLocalOnly = true })
+	c := &store.Client{Name: "router", Token: "tok-public", ProxyString: "vless://u@h:443", Enabled: true}
+	if err := st.PutClient(c); err != nil {
+		t.Fatalf("PutClient: %v", err)
+	}
+	for _, path := range []string{"/api/v1/profile?token=tok-public", "/api/v1/sub?token=tok-public"} {
+		rr := httptest.NewRecorder()
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		req.Host = "backfiregame.org"
+		srv.Handler().ServeHTTP(rr, req)
+		if rr.Code != http.StatusOK {
+			t.Fatalf("%s = %d, want 200", path, rr.Code)
+		}
+	}
+}

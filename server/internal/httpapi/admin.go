@@ -48,6 +48,14 @@ var errNotices = map[string]string{
 func (s *Server) handleAdmin(w http.ResponseWriter, r *http.Request) {
 	s.noIndex(w)
 
+	// Off the hostnames the operator area is meant to answer on, behave as the
+	// site does for any path it does not know. Answering differently — a 403, a
+	// bare 404 — would confirm the secret path to anyone who guessed it.
+	if !s.adminReachable(r) {
+		s.siteNotFound(w)
+		return
+	}
+
 	rel := strings.TrimPrefix(r.URL.Path, s.cfg.AdminPath)
 	rel = strings.TrimPrefix(rel, "/")
 
