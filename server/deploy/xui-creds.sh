@@ -8,8 +8,11 @@
 #   ./xui-creds.sh --reset               set a new random username/password
 #   ./xui-creds.sh --reset --user NAME   ... with a username of your choosing
 #   ./xui-creds.sh --reset --no-wire     ... without touching .env
+#   ./xui-creds.sh --wire                keep the login, just tell the panel
+#                                        about it (asks for the password)
 #
-# A reset also teaches the panel the new login, so key issuance keeps working.
+# Both --reset and --wire teach the panel the login and the base path, which
+# is what key issuance on the CLIENTS screen runs on.
 set -eu
 
 SELF_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
@@ -17,14 +20,16 @@ ENV_FILE="$SELF_DIR/.env"
 RESET=""
 USERNAME="admin"
 WIRE="yes"
+WIRE_ONLY=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
         --reset) RESET="yes"; shift ;;
+        --wire) WIRE_ONLY="yes"; shift ;;
         --user) USERNAME="${2:?--user needs a value}"; shift 2 ;;
         --user=*) USERNAME="${1#*=}"; shift ;;
         --no-wire) WIRE=""; shift ;;
-        -h|--help) sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) printf 'unknown option: %s\n' "$1" >&2; exit 2 ;;
     esac
 done
@@ -94,40 +99,67 @@ case "$BASE_PATH" in
     *) XUI_URL="http://3x-ui:2053/${BASE_PATH#/}"; XUI_URL="${XUI_URL%/}" ;;
 esac
 
-if [ -n "$RESET" ] && [ -n "$WIRE" ]; then
+wire_panel() {
+    wire_user="$1"
+    wire_password="$2"
+
     if [ ! -f "$ENV_FILE" ]; then
         printf '\nNo .env next to this script — skipping the panel wiring.\n'
-    else
-        printf '\nTeaching the panel the new login:\n'
-        set_kv XUI_USERNAME "$USERNAME"
-        set_kv XUI_PASSWORD "$NEW_PASSWORD"
-        set_kv XUI_BASE_URL "$XUI_URL"
-
-        # Links are useless without an address clients can dial. A domain
-        # fronted by the tunnel would send them to Cloudflare, so this is the
-        # raw address of the VPS.
-        current_host=$(get_kv XUI_PUBLIC_HOST)
-        case "$current_host" in
-            "" | your-domain.example)
-                detected=$(curl -fsS --max-time 5 https://api.ipify.org 2>/dev/null || true)
-                if [ -n "$detected" ]; then
-                    set_kv XUI_PUBLIC_HOST "$detected"
-                else
-                    printf '  XUI_PUBLIC_HOST is unset and the address could not be\n'
-                    printf '  detected — set it to the IP of this VPS by hand.\n'
-                fi
-                ;;
-        esac
-
-        if [ -n "$ENV_KV_CHANGED" ]; then
-            printf '\nPrevious .env kept as %s.bak\n' "$ENV_FILE"
-            # Environment is fixed when a container is created, so restart
-            # would keep serving the old values.
-            printf 'Recreating the panel so it picks the values up...\n'
-            compose up -d podkop-server >/dev/null
-        fi
-        printf 'Check it on the panel: CONFIG screen, XUI line.\n'
+        return 0
     fi
+
+    printf '\nTeaching the panel the login:\n'
+    set_kv XUI_USERNAME "$wire_user"
+    set_kv XUI_PASSWORD "$wire_password"
+    set_kv XUI_BASE_URL "$XUI_URL"
+
+    # Links are useless without an address clients can dial. A domain fronted
+    # by the tunnel would send them to Cloudflare, so this is the raw address
+    # of the VPS.
+    current_host=$(get_kv XUI_PUBLIC_HOST)
+    case "$current_host" in
+        "" | your-domain.example)
+            detected=$(curl -fsS --max-time 5 https://api.ipify.org 2>/dev/null || true)
+            if [ -n "$detected" ]; then
+                set_kv XUI_PUBLIC_HOST "$detected"
+            else
+                printf '  XUI_PUBLIC_HOST is unset and the address could not be\n'
+                printf '  detected — set it to the IP of this VPS by hand.\n'
+            fi
+            ;;
+    esac
+
+    if [ -n "$ENV_KV_CHANGED" ]; then
+        printf '\nPrevious .env kept as %s.bak\n' "$ENV_FILE"
+        # Environment is fixed when a container is created, so restart would
+        # keep serving the old values.
+        printf 'Recreating the panel so it picks the values up...\n'
+        compose up -d podkop-server >/dev/null
+    fi
+    printf 'Check it on the panel: CONFIG screen, XUI line.\n'
+}
+
+if [ -n "$RESET" ] && [ -n "$WIRE" ]; then
+    wire_panel "$USERNAME" "$NEW_PASSWORD"
+elif [ -n "$WIRE_ONLY" ]; then
+    # The password is never displayed by 3x-UI and is not worth putting in
+    # shell history, so it is read from the terminal with echo turned off.
+    printf '\nWiring the panel to the existing 3x-UI login.\n'
+    printf 'Username: %s  (change it with --user)\n' "$USERNAME"
+    printf 'Password: '
+    if [ -t 0 ]; then
+        stty_state=$(stty -g)
+        trap 'stty "$stty_state" 2>/dev/null' EXIT INT TERM
+        stty -echo
+        read -r EXISTING_PASSWORD
+        stty "$stty_state"
+        trap - EXIT INT TERM
+        printf '\n'
+    else
+        read -r EXISTING_PASSWORD
+    fi
+    [ -n "$EXISTING_PASSWORD" ] || die "no password entered"
+    wire_panel "$USERNAME" "$EXISTING_PASSWORD"
 fi
 
 case "$settings" in
