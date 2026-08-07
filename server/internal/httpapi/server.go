@@ -9,6 +9,7 @@ package httpapi
 
 import (
 	"html/template"
+	"io"
 	"io/fs"
 	"log"
 	"net"
@@ -172,6 +173,52 @@ func (s *Server) mediaHandler() http.Handler {
 	})
 }
 
+// contentSignalsPolicy is the Content Signals Policy preamble (contentsignals.org),
+// the same text Cloudflare's managed robots.txt carries. It is served from the
+// origin so the two files do not have to be stitched together: Cloudflare
+// prepends its managed block before ours when the setting is on, and its
+// "Allow: /" then contradicts our "Disallow: /" inside one and the same
+// user-agent group. Carrying the policy here means the managed setting can be
+// switched off without losing anything.
+const contentSignalsPolicy = `# As a condition of accessing this website, you agree to abide by the
+# following content signals:
+
+# (a)  If a content-signal = yes, you may collect content for the
+#      corresponding use.
+# (b)  If a content-signal = no, you may not collect content for the
+#      corresponding use.
+# (c)  If the website operator does not include a content signal for a
+#      corresponding use, the website operator neither grants nor restricts
+#      permission via content signal with respect to the corresponding use.
+
+# The content signals and their meanings are:
+
+# search: building a search index and providing search results (e.g., returning
+#         hyperlinks and short excerpts from your website's contents). Search
+#         does not include providing AI-generated search summaries.
+# ai-input: inputting content into one or more AI models (e.g., retrieval
+#           augmented generation, grounding, or other real-time taking of
+#           content for generative AI search answers).
+# ai-train: training or fine-tuning AI models.
+
+# ANY RESTRICTIONS EXPRESSED VIA CONTENT SIGNALS ARE EXPRESS RESERVATIONS OF
+# RIGHTS UNDER ARTICLE 4 OF THE EUROPEAN UNION DIRECTIVE 2019/790 ON COPYRIGHT
+# AND RELATED RIGHTS IN THE DIGITAL SINGLE MARKET.
+`
+
+// aiCrawlers are the model-training and answer-engine bots that get a plain
+// refusal even when the site itself is open to search engines — the same intent
+// as Cloudflare's managed rules, spelled out at the origin. A wildcard
+// "Disallow: /" already covers them when indexing is off, so the list is only
+// emitted in the open case.
+var aiCrawlers = []string{
+	"AI2Bot", "Amazonbot", "Applebot-Extended", "Bytespider", "CCBot",
+	"ChatGPT-User", "Claude-SearchBot", "Claude-User", "ClaudeBot",
+	"Diffbot", "FacebookBot", "GPTBot", "Google-Extended", "ImagesiftBot",
+	"Meta-ExternalAgent", "OAI-SearchBot", "PerplexityBot", "Perplexity-User",
+	"Timpibot", "Webzio-Extended", "anthropic-ai", "cohere-ai",
+}
+
 // handleRobots states the crawling preference for the public site. The operator
 // area is never named here: robots.txt is world-readable, so a Disallow line
 // would publish the secret admin path to everyone who asks for the file — and
@@ -180,11 +227,24 @@ func (s *Server) mediaHandler() http.Handler {
 // responses instead, which discloses nothing.
 func (s *Server) handleRobots(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+
+	var b strings.Builder
+	b.WriteString(contentSignalsPolicy)
+	b.WriteString("\nUser-agent: *\n")
+
 	if s.cfg.SiteIndexing && s.cfg.Root == "site" {
-		_, _ = w.Write([]byte("User-agent: *\nAllow: /\n"))
-		return
+		b.WriteString("Content-Signal: search=yes, ai-input=no, ai-train=no, use=reference\n")
+		b.WriteString("Allow: /\n\n")
+		for _, ua := range aiCrawlers {
+			b.WriteString("User-agent: " + ua + "\n")
+		}
+		b.WriteString("Disallow: /\n")
+	} else {
+		b.WriteString("Content-Signal: search=no, ai-input=no, ai-train=no, use=immediate\n")
+		b.WriteString("Disallow: /\n")
 	}
-	_, _ = w.Write([]byte("User-agent: *\nDisallow: /\n"))
+
+	_, _ = io.WriteString(w, b.String())
 }
 
 // handleRoot serves whatever the deployment put at the public root — unless the

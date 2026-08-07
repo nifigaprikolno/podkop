@@ -322,8 +322,19 @@ func TestRobotsAndNoIndex(t *testing.T) {
 	srv, _ := newTestServer(t)
 	rr := httptest.NewRecorder()
 	srv.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/robots.txt", nil))
-	if !strings.Contains(rr.Body.String(), "Disallow: /") {
-		t.Errorf("robots.txt = %q, want everything disallowed by default", rr.Body.String())
+	closed := rr.Body.String()
+	if !strings.Contains(closed, "Disallow: /") {
+		t.Errorf("robots.txt = %q, want everything disallowed by default", closed)
+	}
+	if strings.Contains(closed, "Allow: /") {
+		t.Errorf("robots.txt = %q, an Allow line in the same group cancels the Disallow", closed)
+	}
+	// The whole point of serving the policy ourselves is that Cloudflare's
+	// managed robots.txt can be switched off without losing the signals.
+	for _, want := range []string{"content signals", "Content-Signal: search=no", "ai-train=no"} {
+		if !strings.Contains(closed, want) {
+			t.Errorf("robots.txt = %q, want it to carry %q", closed, want)
+		}
 	}
 
 	// With indexing switched on the site opens up — but robots.txt must never
@@ -338,6 +349,12 @@ func TestRobotsAndNoIndex(t *testing.T) {
 	}
 	if strings.Contains(body, "manage-secret") {
 		t.Errorf("robots.txt leaks the admin path: %q", body)
+	}
+	// Open to search engines still means closed to model training: the
+	// wildcard group no longer covers it, so the crawlers are named.
+	if !strings.Contains(body, "User-agent: GPTBot") ||
+		!strings.Contains(body, "Content-Signal: search=yes") {
+		t.Errorf("robots.txt = %q, want AI crawlers refused while search is open", body)
 	}
 
 	rr = httptest.NewRecorder()

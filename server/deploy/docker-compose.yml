@@ -77,6 +77,12 @@ services:
     environment:
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:-}
     command: tunnel --no-autoupdate run
+    # Lets a hostname route point at something running on the VPS itself rather
+    # than in this compose file — e.g. a 3x-UI installed with its own script:
+    # http://host.docker.internal:2053. Services from this file are reached by
+    # name instead (podkop-server:8080, 3x-ui:2053).
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks: [internal]
 
   3x-ui:
@@ -94,8 +100,13 @@ services:
     # Leave this commented out if another Xray (e.g. Amnezia's) already owns 443.
     #ports:
     #  - "443:443"
-    expose:
-      - "2053"
+    ports:
+      # 3x-UI's own web interface. Loopback by default, so it is reachable from
+      # the VPS itself (`ssh -L 2053:127.0.0.1:2053 vps`) and from nothing else.
+      # To publish it instead, add a hostname route to 3x-ui:2053 in the tunnel
+      # and put a Cloudflare Access policy on that hostname FIRST — this login
+      # form controls every key on the server.
+      - "${XUI_UI_BIND:-127.0.0.1}:2053:2053"
 
 volumes:
   podkop_data:
