@@ -553,6 +553,27 @@ function createSettingsContent(section) {
     return Promise.resolve();
   };
 
+  // A router that already carries a tunnel of its own keeps it by giving the
+  // panel a section to itself: the profile then never touches main.
+  o = section.option(
+    form.Value,
+    "remote_config_section",
+    _("Target Section"),
+    _(
+      "Section the profile is written to — its proxy key and community lists come from the panel. Leave empty for 'main'. Name a section of its own to keep your local tunnel in main untouched; it is created on first use.",
+    ),
+  );
+  o.depends("remote_config_enabled", "1");
+  o.placeholder = "main";
+  o.rmempty = true;
+  o.validate = function (section_id, value) {
+    if (value === "" || value === null) return true;
+    if (!/^[a-zA-Z0-9_]+$/.test(value)) {
+      return _("Only letters, digits and underscore");
+    }
+    return true;
+  };
+
   o = section.option(form.Button, "_remote_config_apply", _("Route Profile"));
   o.depends("remote_config_enabled", "1");
   o.inputtitle = _("Apply profile now");

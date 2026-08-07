@@ -9,12 +9,18 @@
 # Profile JSON shape (all fields optional; missing fields are left untouched):
 #   {
 #     "proxy_string":    "vless://...",            // key issued by the panel/3x-UI
-#     "community_lists":  ["russia_inside", ...],   // replaces main.community_lists
+#     "community_lists":  ["russia_inside", ...],   // replaces the section's lists
 #     "p2p_direct":       true,
 #     "direct_ru_zones":  true,
 #     "dns":             { "type": "doh", "server": "https://..." },
 #     "update_interval":  "1d"
 #   }
+#
+# The profile lands in one podkop section, named by remote_config_section and
+# "main" by default. Point it at a section of its own when the router already
+# carries a tunnel you keep locally: the panel then owns that section alone, and
+# your own outbound and lists in main stay as you left them. The section is
+# created on first use, so nothing has to exist beforehand.
 #
 # The panel does not have to be published on the internet: remote_config_access
 # selects how the router reaches it.
@@ -30,6 +36,7 @@
 REMOTE_CONFIG_DEFAULT_CACHE="/etc/podkop/remote_profile.json"
 REMOTE_CONFIG_CURL_TIMEOUT=15
 REMOTE_CONFIG_DEFAULT_ACCESS="direct"
+REMOTE_CONFIG_DEFAULT_SECTION="main"
 
 # Is remote management enabled and configured? Echoes url/token via globals.
 _remote_config_load_settings() {
@@ -39,6 +46,15 @@ _remote_config_load_settings() {
     config_get _rc_cache "settings" "remote_config_cache" "$REMOTE_CONFIG_DEFAULT_CACHE"
     config_get _rc_access "settings" "remote_config_access" "$REMOTE_CONFIG_DEFAULT_ACCESS"
     config_get _rc_route_iface "settings" "remote_config_route_interface" "$AWG_DEFAULT_INTERFACE"
+    config_get _rc_section "settings" "remote_config_section" "$REMOTE_CONFIG_DEFAULT_SECTION"
+    # An empty or malformed name would send uci_set at the wrong target — or at
+    # every section at once. Fall back rather than write somewhere unintended.
+    case "$_rc_section" in
+    "" | *[!a-zA-Z0-9_]*)
+        log "remote_config: invalid remote_config_section, using $REMOTE_CONFIG_DEFAULT_SECTION" "warn"
+        _rc_section="$REMOTE_CONFIG_DEFAULT_SECTION"
+        ;;
+    esac
 }
 
 # IPv4 check without regexes: is_ipv4() in helpers.sh leans on escapes whose
@@ -198,6 +214,15 @@ _remote_config_valid_proxy() {
 _remote_config_apply() {
     local profile="$1"
     local proxy_string p2p_direct direct_ru_zones dns_type dns_server update_interval
+    local section="${_rc_section:-$REMOTE_CONFIG_DEFAULT_SECTION}"
+
+    # The section the panel owns need not exist yet: naming a fresh one in
+    # remote_config_section is how a router keeps its own tunnel in main.
+    if [ -z "$(uci -q get "podkop.$section")" ]; then
+        log "remote_config: creating section $section"
+        uci -q set "podkop.$section=section"
+        uci_set "podkop" "$section" "connection_type" "proxy"
+    fi
 
     proxy_string="$(echo "$profile" | jq -r '.proxy_string // empty')"
     p2p_direct="$(echo "$profile" | jq -r 'if .p2p_direct == null then empty elif .p2p_direct then "1" else "0" end')"
@@ -206,21 +231,21 @@ _remote_config_apply() {
     dns_server="$(echo "$profile" | jq -r '.dns.server // empty')"
     update_interval="$(echo "$profile" | jq -r '.update_interval // empty')"
 
-    # Proxy key for the main section
+    # Proxy key for the panel's section
     if [ -n "$proxy_string" ]; then
         if _remote_config_valid_proxy "$proxy_string"; then
-            uci_set "podkop" "main" "proxy_config_type" "url"
-            uci_set "podkop" "main" "proxy_string" "$proxy_string"
+            uci_set "podkop" "$section" "proxy_config_type" "url"
+            uci_set "podkop" "$section" "proxy_string" "$proxy_string"
         else
             log "remote_config: ignoring proxy_string with unsupported scheme" "warn"
         fi
     fi
 
-    # Community lists (array) → replace main.community_lists
+    # Community lists (array) → replace the section's community_lists
     if echo "$profile" | jq -e '.community_lists | type == "array"' >/dev/null 2>&1; then
-        uci -q delete "podkop.main.community_lists"
+        uci -q delete "podkop.$section.community_lists"
         echo "$profile" | jq -r '.community_lists[]' | while IFS= read -r cl; do
-            [ -n "$cl" ] && uci_add_list "podkop" "main" "community_lists" "$cl"
+            [ -n "$cl" ] && uci_add_list "podkop" "$section" "community_lists" "$cl"
         done
     fi
 
