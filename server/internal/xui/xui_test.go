@@ -151,7 +151,7 @@ func TestInboundNetworkAndSupportsFlow(t *testing.T) {
 		{"empty defaults to tcp", `{"security":"reality"}`, "tcp", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			in := &Inbound{StreamSettings: tc.stream}
+			in := &Inbound{StreamSettings: jsonBlob(tc.stream)}
 			network, _, err := in.Network()
 			if err != nil {
 				t.Fatalf("Network: %v", err)
