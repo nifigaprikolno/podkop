@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -49,26 +50,11 @@ func AssembleProfile(c *store.Client, p *store.Profile) ProfileResponse {
 // handleProfile serves GET /api/v1/profile. Auth is by client token supplied as
 // ?token=, Authorization: Bearer <token>, or X-Podkop-Token.
 func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
-	token := extractToken(r)
-	if token == "" {
-		http.Error(w, "missing token", http.StatusUnauthorized)
+	c, ok := s.authenticateClient(w, r)
+	if !ok {
 		return
 	}
-
-	c, err := s.store.Client(token)
-	if err != nil {
-		if errors.Is(err, store.ErrNotFound) {
-			// Do not distinguish unknown token from other errors to avoid leaking.
-			http.NotFound(w, r)
-			return
-		}
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
-	}
-	if !c.Enabled {
-		http.Error(w, "client disabled", http.StatusForbidden)
-		return
-	}
+	token := c.Token
 
 	p, err := s.store.Profile(c.ProfileID)
 	if err != nil {
@@ -94,6 +80,32 @@ func (s *Server) handleProfile(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
+// authenticateClient resolves the client token on a router-facing endpoint and
+// writes the response itself when it cannot. An unknown token is answered with
+// 404 rather than 403 so probing cannot tell valid tokens from invalid ones.
+func (s *Server) authenticateClient(w http.ResponseWriter, r *http.Request) (*store.Client, bool) {
+	token := extractToken(r)
+	if token == "" {
+		http.Error(w, "missing token", http.StatusUnauthorized)
+		return nil, false
+	}
+
+	c, err := s.store.Client(token)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			http.NotFound(w, r)
+			return nil, false
+		}
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return nil, false
+	}
+	if !c.Enabled {
+		http.Error(w, "client disabled", http.StatusForbidden)
+		return nil, false
+	}
+	return c, true
+}
+
 // extractToken pulls the client token from the request.
 func extractToken(r *http.Request) string {
 	if t := r.URL.Query().Get("token"); t != "" {
@@ -106,4 +118,38 @@ func extractToken(r *http.Request) string {
 		return auth[7:]
 	}
 	return ""
+}
+
+// handleSubscription serves GET /api/v1/sub — the same key the router gets, in
+// the shape phone clients expect. /api/v1/profile answers with podkop's own
+// profile document, which a client like Hiddify or v2rayNG cannot parse at all:
+// a subscription is a list of proxy URIs, conventionally base64 encoded.
+//
+// Auth is the client token, exactly as on /api/v1/profile.
+func (s *Server) handleSubscription(w http.ResponseWriter, r *http.Request) {
+	c, ok := s.authenticateClient(w, r)
+	if !ok {
+		return
+	}
+	if c.ProxyString == "" {
+		http.Error(w, "no proxy configured for this client", http.StatusNotFound)
+		return
+	}
+
+	ip := s.clientIP(r)
+	if err := s.store.TouchClient(c.Token, ip); err != nil {
+		log.Printf("touch client: %v", err)
+	}
+	s.events.Info("SUB", fmt.Sprintf("%s fetched a subscription from %s", c.Name, ip))
+
+	// Some clients read the raw text and some insist on base64; base64 is what
+	// the convention settled on and every client accepts it.
+	body := base64.StdEncoding.EncodeToString([]byte(c.ProxyString + "\n"))
+
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	// Names the entry in the client's profile list instead of leaving it "unnamed".
+	w.Header().Set("Profile-Title", c.Name)
+	s.noIndex(w)
+	_, _ = w.Write([]byte(body))
 }

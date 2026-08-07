@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -742,5 +743,55 @@ func TestAdminHostIgnoresUntrustedForwardedHost(t *testing.T) {
 				t.Errorf("code = %d, want %d", rr.Code, tc.wantCode)
 			}
 		})
+	}
+}
+
+// Phone clients speak subscriptions, not podkop's profile document — pointing
+// one at /api/v1/profile only produces "unable to determine protocol format".
+func TestSubscriptionEndpoint(t *testing.T) {
+	srv, st := newTestServer(t)
+	c := &store.Client{Name: "phone", ProxyString: "vless://uuid@1.2.3.4:443?type=tcp", Enabled: true}
+	if err := st.PutClient(c); err != nil {
+		t.Fatal(err)
+	}
+
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/v1/sub?token="+c.Token, nil))
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", rr.Code)
+	}
+	decoded, err := base64.StdEncoding.DecodeString(strings.TrimSpace(rr.Body.String()))
+	if err != nil {
+		t.Fatalf("body is not base64: %v (%q)", err, rr.Body.String())
+	}
+	if !strings.Contains(string(decoded), c.ProxyString) {
+		t.Errorf("decoded body = %q, want the proxy link", decoded)
+	}
+	if got := rr.Header().Get("Profile-Title"); got != "phone" {
+		t.Errorf("Profile-Title = %q, want the client name", got)
+	}
+
+	// The token is the only credential, so a missing or unknown one must not
+	// hand out keys — and must not reveal which of the two it was.
+	rr = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/v1/sub", nil))
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("no token: status = %d, want 401", rr.Code)
+	}
+	rr = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/v1/sub?token=nope", nil))
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("bad token: status = %d, want 404", rr.Code)
+	}
+
+	// A disabled client keeps its token but stops getting the key.
+	c.Enabled = false
+	if err := st.PutClient(c); err != nil {
+		t.Fatal(err)
+	}
+	rr = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/api/v1/sub?token="+c.Token, nil))
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("disabled client: status = %d, want 403", rr.Code)
 	}
 }

@@ -149,8 +149,9 @@ func (s *Server) SetBuildInfo(b BuildInfo) { s.build = b }
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 
-	// Router-facing API.
+	// Router-facing API, plus the same key as a subscription for phone clients.
 	mux.HandleFunc("/api/v1/profile", s.handleProfile)
+	mux.HandleFunc("/api/v1/sub", s.handleSubscription)
 
 	// Operator area (CMS + panel) on the secret path.
 	mux.HandleFunc(s.cfg.AdminPath, s.handleAdmin)
