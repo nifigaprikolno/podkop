@@ -93,6 +93,7 @@ VPS-панель для централизованного управления 
 | `PODKOP_SERVER_STORE` | `/var/lib/podkop-server/store.json` | Файл хранилища (JSON) |
 | `PODKOP_SERVER_ADMIN_PATH` | `/manage/` | **Секретный** путь операторской области (обязательно смените) |
 | `PODKOP_SERVER_ADMIN_USER` | `admin` | Логин оператора |
+| `PODKOP_SERVER_PUBLIC_URL` | из запроса | База для ссылок роутеру и подписки. Обязательна, если панель на своём хостнейме за Access: иначе ссылки собираются от него, а машины получают оттуда логин Access |
 | `PODKOP_SERVER_ADMIN_HOST` | — | Отдельный хостнейм для панели: его корень ведёт в операторскую область, а не на сайт. Только для хостнейма за Cloudflare Access |
 | `PODKOP_SERVER_ADMIN_PASSWORD` | — | Пароль оператора (**обязателен**) |
 | `PODKOP_SERVER_SESSION_TTL` | `12h` | Время жизни сессии, продлевается активностью |

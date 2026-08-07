@@ -795,3 +795,53 @@ func TestSubscriptionEndpoint(t *testing.T) {
 		t.Errorf("disabled client: status = %d, want 403", rr.Code)
 	}
 }
+
+// The links handed to routers and phones must not be built from the hostname
+// the operator happens to be browsing: with the panel on its own host behind
+// Access, that host answers machines with a login page, not their key.
+func TestClientLinksUsePublicURL(t *testing.T) {
+	srv, st := newTestServerWith(t, func(c *config.Config) {
+		c.PublicURL = "https://example.org"
+		c.AdminHost = "panel.example.org"
+	})
+	c := &store.Client{Name: "phone", ProxyString: "vless://u@h:443", Enabled: true}
+	if err := st.PutClient(c); err != nil {
+		t.Fatal(err)
+	}
+
+	cookie, _ := login(t, srv)
+	body := get(t, srv, cookie, srv.cfg.AdminPath+"clients?edit="+c.Token).Body.String()
+
+	for _, want := range []string{
+		"https://example.org/api/v1/profile?token=" + c.Token,
+		"https://example.org/api/v1/sub?token=" + c.Token,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("clients screen is missing %q", want)
+		}
+	}
+	if strings.Contains(body, "panel.example.org/api/") {
+		t.Error("links were built from the operator hostname")
+	}
+}
+
+// Without a configured public URL the request host is used, but a forwarded
+// header is only believed behind a trusted proxy.
+func TestClientLinksIgnoreUntrustedForwardedHost(t *testing.T) {
+	srv, st := newTestServer(t)
+	c := &store.Client{Name: "router", ProxyString: "vless://u@h:443", Enabled: true}
+	if err := st.PutClient(c); err != nil {
+		t.Fatal(err)
+	}
+
+	cookie, _ := login(t, srv)
+	rr := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, srv.cfg.AdminPath+"clients?edit="+c.Token, nil)
+	req.Header.Set("X-Forwarded-Host", "evil.example")
+	req.AddCookie(cookie)
+	srv.Handler().ServeHTTP(rr, req)
+
+	if strings.Contains(rr.Body.String(), "evil.example") {
+		t.Error("a spoofed X-Forwarded-Host reached the generated links")
+	}
+}

@@ -266,12 +266,17 @@ func (s *Server) adminScreen(w http.ResponseWriter, r *http.Request, screen stri
 		p.Events = eventViews(s.events.Entries("", 12))
 
 	case screenClients:
-		base := publicBaseURL(r)
+		base := s.publicBaseURL(r)
 		p.Clients = s.clientViews(base, p.Query, p.Filter)
 		p.Profiles = s.store.Profiles()
 		if id := q.Get("edit"); id != "" {
 			if c, err := s.store.Client(id); err == nil {
-				v := clientView{Client: c, MaskedToken: maskToken(c.Token)}
+				v := clientView{
+					Client:      c,
+					MaskedToken: maskToken(c.Token),
+					ProfileURL:  fmt.Sprintf("%s/api/v1/profile?token=%s", base, c.Token),
+					SubURL:      fmt.Sprintf("%s/api/v1/sub?token=%s", base, c.Token),
+				}
 				p.EditClient = &v
 			} else {
 				p.Error = errNotices["unknown_client"]
@@ -648,15 +653,24 @@ func newUUID() (string, error) {
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:16]), nil
 }
 
-// publicBaseURL reconstructs the externally visible base URL for building sub links.
-func publicBaseURL(r *http.Request) string {
+// publicBaseURL is the base the router-facing links are built from. The
+// configured value wins: the host the operator is browsing is frequently not
+// the host machines can reach.
+func (s *Server) publicBaseURL(r *http.Request) string {
+	if s.cfg.PublicURL != "" {
+		return s.cfg.PublicURL
+	}
 	scheme := "http"
 	if isHTTPS(r) {
 		scheme = "https"
 	}
 	host := r.Host
-	if fh := r.Header.Get("X-Forwarded-Host"); fh != "" {
-		host = fh
+	// Same rule as everywhere else: a forwarded header is only believed when
+	// something trusted is known to be in front.
+	if s.cfg.TrustedProxy {
+		if fh := r.Header.Get("X-Forwarded-Host"); fh != "" {
+			host = fh
+		}
 	}
 	return scheme + "://" + host
 }

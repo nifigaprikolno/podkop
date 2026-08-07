@@ -23,6 +23,14 @@ type Config struct {
 	// AdminUser / AdminPassword authenticate the operator on the admin panel.
 	AdminUser     string
 	AdminPassword string
+	// PublicURL is the externally reachable base for the router-facing API,
+	// e.g. "https://example.org". The panel builds profile and subscription
+	// links from it. Without it the links are built from whatever host the
+	// operator happens to be browsing — which, when the panel sits on its own
+	// hostname behind Cloudflare Access, is a host no router or phone can
+	// fetch from: they get the Access login instead of their key.
+	PublicURL string
+
 	// AdminHost, when set, turns that hostname into the operator entrance: its
 	// root goes to the panel instead of the cover site. Meant for a hostname
 	// that already sits behind Cloudflare Access or similar — reaching it is
@@ -123,6 +131,7 @@ func Load() (*Config, error) {
 		AdminPath:     env("PODKOP_SERVER_ADMIN_PATH", "/manage/"),
 		AdminUser:     env("PODKOP_SERVER_ADMIN_USER", "admin"),
 		AdminHost:     strings.ToLower(strings.TrimSpace(env("PODKOP_SERVER_ADMIN_HOST", ""))),
+		PublicURL:     strings.TrimRight(strings.TrimSpace(env("PODKOP_SERVER_PUBLIC_URL", "")), "/"),
 		AdminPassword: env("PODKOP_SERVER_ADMIN_PASSWORD", ""),
 		DecoyDir:      env("PODKOP_SERVER_DECOY_DIR", ""),
 		Root:          strings.ToLower(strings.TrimSpace(env("PODKOP_SERVER_ROOT", "site"))),

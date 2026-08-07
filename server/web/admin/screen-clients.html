@@ -15,7 +15,10 @@
 <div class="notice">
   Key issued for <b>{{.Created.Name}}</b>. Put this token into the router:
   <code>{{.Created.Token}}</code><br>
-  Subscription URL: <code>{{.Created.SubURL}}</code>
+  Router profile URL: <code>{{.Created.ProfileURL}}</code><br>
+  Subscription URL for phone apps: <code>{{.Created.SubURL}}</code><br>
+  <small>Both must point at a host that is reachable without an Access login —
+  set PODKOP_SERVER_PUBLIC_URL if the panel lives on its own hostname.</small>
 </div>
 {{end}}
 
@@ -76,6 +79,17 @@
     <form method="post" action="{{.AdminPath}}clients/save">
       <input type="hidden" name="csrf" value="{{.CSRF}}">
       <input type="hidden" name="token" value="{{if .EditClient}}{{.EditClient.Token}}{{end}}">
+      {{if .EditClient}}
+      {{/* Shown here because the banner after creation is seen once, and the
+           URLs are exactly what an operator comes back looking for. */}}
+      <div class="field">
+        <label>URLS FOR THIS DEVICE</label>
+        <div class="stack">
+          <span class="sub">router: <code>{{.EditClient.ProfileURL}}</code></span>
+          <span class="sub">phone app: <code>{{.EditClient.SubURL}}</code></span>
+        </div>
+      </div>
+      {{end}}
       <div class="grid-2">
         <div class="field">
           <label>ROUTER NAME</label>

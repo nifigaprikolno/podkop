@@ -109,6 +109,7 @@ type hourBar struct {
 type clientView struct {
 	*store.Client
 	ProfileName string
+	ProfileURL  string
 	SubURL      string
 	MaskedToken string
 	Added       string
@@ -248,7 +249,8 @@ func (s *Server) clientViews(base, query, filter string) []clientView {
 	for _, c := range clients {
 		v := clientView{
 			Client:      c,
-			SubURL:      fmt.Sprintf("%s/api/v1/profile?token=%s", base, c.Token),
+			ProfileURL:  fmt.Sprintf("%s/api/v1/profile?token=%s", base, c.Token),
+			SubURL:      fmt.Sprintf("%s/api/v1/sub?token=%s", base, c.Token),
 			MaskedToken: maskToken(c.Token),
 			Added:       formatDate(c.CreatedAt),
 			LastSeenAgo: formatAgo(c.LastSeen),
