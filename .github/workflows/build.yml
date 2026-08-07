@@ -3,6 +3,15 @@ on:
   push:
     tags:
       - '*'
+  # Manual run for the fork: builds the selected ref and publishes a release,
+  # creating the tag at that commit. Lets a release happen without local tag
+  # push rights.
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build and release, e.g. 0.9.9 (tag is created at the selected ref)'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -18,8 +27,10 @@ jobs:
         with:
           fetch-depth: 0
       - id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
-          VERSION=$(git describe --tags --exact-match 2>/dev/null || echo "0.$(date +%d%m%Y)")
+          VERSION="${INPUT_VERSION:-$(git describe --tags --exact-match 2>/dev/null || echo "0.$(date +%d%m%Y)")}"
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
   build:
@@ -91,7 +102,7 @@ jobs:
   release:
     name: Create Release
     runs-on: ubuntu-latest
-    needs: build
+    needs: [preparation, build]
     steps:
       - uses: actions/checkout@v5.0.0
       - name: Create release dir
@@ -115,5 +126,7 @@ jobs:
           files: ./filtered-bin/release/*.*
           draft: false
           prerelease: false
-          name: ${{ github.ref_name }}
-          tag_name: ${{ github.ref_name }}
+          # The version, not the ref: on a manual run the ref is a branch, and
+          # the tag has to be created from the requested version instead.
+          name: ${{ needs.preparation.outputs.version }}
+          tag_name: ${{ needs.preparation.outputs.version }}
