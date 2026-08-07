@@ -9,6 +9,7 @@
 package xui
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -240,16 +241,40 @@ func (c *Client) addClientLegacy(ctx context.Context, inboundID int, cl ClientSe
 	return nil
 }
 
+// jsonBlob is a nested JSON document that 3x-UI encodes one of two ways: as a
+// string holding the encoded document (panels up to 3.5) or as the document
+// itself (3.6 and later). Either arrives here as the raw JSON text, so the rest
+// of the package can keep unmarshalling it in one step.
+type jsonBlob string
+
+func (b *jsonBlob) UnmarshalJSON(data []byte) error {
+	data = bytes.TrimSpace(data)
+	if len(data) == 0 || string(data) == "null" {
+		*b = ""
+		return nil
+	}
+	if data[0] == '"' {
+		var s string
+		if err := json.Unmarshal(data, &s); err != nil {
+			return err
+		}
+		*b = jsonBlob(s)
+		return nil
+	}
+	*b = jsonBlob(data)
+	return nil
+}
+
 // Inbound is the subset of a 3x-UI inbound we need to build a link.
 type Inbound struct {
-	ID             int    `json:"id"`
-	Port           int    `json:"port"`
-	Protocol       string `json:"protocol"`
-	Remark         string `json:"remark"`
-	StreamSettings string `json:"streamSettings"`
+	ID             int      `json:"id"`
+	Port           int      `json:"port"`
+	Protocol       string   `json:"protocol"`
+	Remark         string   `json:"remark"`
+	StreamSettings jsonBlob `json:"streamSettings"`
 	// Settings carries the protocol settings blob, which since VLESS Encryption
 	// is where the value clients must echo back lives.
-	Settings string `json:"settings"`
+	Settings jsonBlob `json:"settings"`
 }
 
 // inboundSettings is the subset of an inbound's protocol settings we parse.

@@ -1,6 +1,7 @@
 package xui
 
 import (
+	"encoding/json"
 	"net/url"
 	"strings"
 	"testing"
@@ -281,4 +282,70 @@ func TestBuildVlessLinkRefusesRealityWithoutKeys(t *testing.T) {
 	if !strings.Contains(err.Error(), "Reality public key") {
 		t.Errorf("error should name the missing key pair, got: %v", err)
 	}
+}
+
+// 3x-UI 3.6 stopped encoding the nested settings documents as strings and now
+// sends them as real JSON objects. Both spellings have to parse, or a panel
+// upgrade silently breaks key issuance with a type error.
+func TestInboundAcceptsBothSettingsEncodings(t *testing.T) {
+	const stream = `{"network":"tcp","security":"reality","realitySettings":{"serverNames":["a.example"],"shortIds":["ab"],"settings":{"publicKey":"pk","fingerprint":"firefox"}}}`
+	const settings = `{"clients":[],"decryption":"none","encryption":"none"}`
+
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{
+			name: "strings (3.5 and earlier)",
+			body: `{"id":1,"protocol":"vless","port":443,` +
+				`"streamSettings":` + quoteJSON(stream) + `,` +
+				`"settings":` + quoteJSON(settings) + `}`,
+		},
+		{
+			name: "objects (3.6 and later)",
+			body: `{"id":1,"protocol":"vless","port":443,` +
+				`"streamSettings":` + stream + `,` +
+				`"settings":` + settings + `}`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var in Inbound
+			if err := json.Unmarshal([]byte(tc.body), &in); err != nil {
+				t.Fatalf("unmarshal inbound: %v", err)
+			}
+			network, security, err := in.Network()
+			if err != nil {
+				t.Fatalf("Network: %v", err)
+			}
+			if network != "tcp" || security != "reality" {
+				t.Fatalf("Network = %q/%q, want tcp/reality", network, security)
+			}
+			if got := in.clientEncryption(); got != "none" {
+				t.Fatalf("clientEncryption = %q, want none", got)
+			}
+
+			c := newTestClient(t)
+			link, err := c.BuildVlessLink(&in, NewClientSettings("uuid-1", "phone"))
+			if err != nil {
+				t.Fatalf("BuildVlessLink: %v", err)
+			}
+			_, host, q := parseLink(t, link)
+			if host != "vpn.example.com:443" {
+				t.Fatalf("host = %q, want vpn.example.com:443", host)
+			}
+			if q.Get("pbk") != "pk" || q.Get("sni") != "a.example" {
+				t.Fatalf("pbk/sni = %q/%q, want pk/a.example", q.Get("pbk"), q.Get("sni"))
+			}
+		})
+	}
+}
+
+// quoteJSON renders s as a JSON string literal, the way older panels sent these
+// documents.
+func quoteJSON(s string) string {
+	b, err := json.Marshal(s)
+	if err != nil {
+		panic(err)
+	}
+	return string(b)
 }
