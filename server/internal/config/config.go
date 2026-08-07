@@ -34,6 +34,11 @@ type Config struct {
 	// SiteIndexing opens robots.txt for the public site. The admin panel is
 	// never indexable regardless of this flag.
 	SiteIndexing bool
+	// SiteName and SiteTagline brand the public site. They are configuration
+	// rather than constants because the site is what visitors see: it has to
+	// match whatever domain it is served from.
+	SiteName    string
+	SiteTagline string
 
 	// SessionTTL bounds how long an operator session stays valid.
 	SessionTTL time.Duration
@@ -116,6 +121,8 @@ func Load() (*Config, error) {
 		DecoyDir:      env("PODKOP_SERVER_DECOY_DIR", ""),
 		Root:          strings.ToLower(strings.TrimSpace(env("PODKOP_SERVER_ROOT", "site"))),
 		SiteIndexing:  envBool("PODKOP_SERVER_SITE_INDEXING", false),
+		SiteName:      env("PODKOP_SERVER_SITE_NAME", "Backfire"),
+		SiteTagline:   env("PODKOP_SERVER_SITE_TAGLINE", "an open-city street racer on s&box"),
 		TrustedProxy:  envBool("PODKOP_SERVER_TRUSTED_PROXY", false),
 		XUIBaseURL:    strings.TrimRight(env("XUI_BASE_URL", ""), "/"),
 		XUIUsername:   env("XUI_USERNAME", ""),
@@ -130,6 +137,12 @@ func Load() (*Config, error) {
 	case "", "xtls-rprx-vision", "xtls-rprx-vision-udp443":
 	default:
 		return nil, fmt.Errorf("invalid XUI_CLIENT_FLOW %q: expected empty, xtls-rprx-vision or xtls-rprx-vision-udp443", c.XUIClientFlow)
+	}
+
+	// An explicitly empty name would render a blank wordmark, which is worse
+	// than a generic one.
+	if strings.TrimSpace(c.SiteName) == "" {
+		c.SiteName = "Backfire"
 	}
 
 	switch c.Root {

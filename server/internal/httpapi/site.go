@@ -16,8 +16,12 @@ import (
 type siteData struct {
 	Styles template.CSS
 	Title  string
-	Posts  []sitePost
-	Post   *sitePost
+	// Name and Tagline brand the site; they come from configuration so the
+	// content matches the domain it is served from.
+	Name    string
+	Tagline string
+	Posts   []sitePost
+	Post    *sitePost
 }
 
 type sitePost struct {
@@ -32,17 +36,15 @@ type sitePost struct {
 	URL     string
 }
 
-// handleSite serves the Halogen devlog — the public face of this host. The
-// static sections (hero, roadmap, stack) live in the template; the log entries
-// come from the store and are written in the operator area.
+// handleSite serves the devlog — the public face of this host. The static
+// sections (hero, roadmap, stack) live in the template; the log entries come
+// from the store and are written in the operator area.
 func (s *Server) handleSite(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.URL.Path == "/":
-		s.renderSite(w, "site-index", siteData{
-			Styles: s.siteCSS,
-			Title:  "Halogen — an open-city street racer on s&box",
-			Posts:  s.sitePosts(false),
-		})
+		data := s.newSiteData(s.cfg.SiteName + " — " + s.cfg.SiteTagline)
+		data.Posts = s.sitePosts(false)
+		s.renderSite(w, "site-index", data)
 	case strings.HasPrefix(r.URL.Path, "/post/"):
 		slug := strings.TrimPrefix(r.URL.Path, "/post/")
 		post, err := s.store.PostBySlug(strings.Trim(slug, "/"))
@@ -54,19 +56,26 @@ func (s *Server) handleSite(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		view := s.sitePost(post)
-		s.renderSite(w, "site-post", siteData{
-			Styles: s.siteCSS,
-			Title:  post.Title + " — Halogen devlog",
-			Post:   &view,
-		})
+		data := s.newSiteData(post.Title + " — " + s.cfg.SiteName + " devlog")
+		data.Post = &view
+		s.renderSite(w, "site-post", data)
 	default:
 		s.siteNotFound(w)
 	}
 }
 
+func (s *Server) newSiteData(title string) siteData {
+	return siteData{
+		Styles:  s.siteCSS,
+		Title:   title,
+		Name:    s.cfg.SiteName,
+		Tagline: s.cfg.SiteTagline,
+	}
+}
+
 func (s *Server) siteNotFound(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusNotFound)
-	s.renderSite(w, "site-404", siteData{Styles: s.siteCSS, Title: "Not found — Halogen"})
+	s.renderSite(w, "site-404", s.newSiteData("Not found — "+s.cfg.SiteName))
 }
 
 func (s *Server) sitePosts(includeDrafts bool) []sitePost {

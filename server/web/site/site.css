@@ -1,4 +1,5 @@
-/* Halogen devlog — the public site.
+/* The public devlog, drawn in Halogen — the game's own UI library, the same
+ * one the operator panel borrows.
  *
  * Same visual language as the operator panel (dark plates, cyan hairlines,
  * amber accents) but wider and calmer. Everything is inlined at render time:
@@ -74,7 +75,9 @@ a:hover { color: var(--warm); }
   font-size: 17px;
   color: var(--warm);
 }
-.brand b { color: var(--orange); text-shadow: 0 0 16px rgba(255, 110, 50, 0.6); font-weight: 700; }
+/* The wordmark is uppercased in CSS so the configured name keeps its natural
+ * spelling everywhere else (titles, footer, page metadata). */
+.brand b { color: var(--orange); text-shadow: 0 0 16px rgba(255, 110, 50, 0.6); font-weight: 700; text-transform: uppercase; letter-spacing: 2px; }
 .brand span { font-family: var(--mono); font-weight: 500; font-size: 11px; letter-spacing: 2px; color: var(--faint); }
 .topnav { display: flex; flex-wrap: wrap; gap: 28px; font-size: 12px; letter-spacing: 2px; text-transform: uppercase; }
 .topnav a { color: rgba(200, 220, 232, 0.72); }

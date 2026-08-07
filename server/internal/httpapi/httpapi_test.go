@@ -31,6 +31,8 @@ func newTestServerWith(t *testing.T, tweak func(*config.Config)) (*Server, *stor
 		AdminUser:     "admin",
 		AdminPassword: "s3cret",
 		Root:          "site",
+		SiteName:      "Backfire",
+		SiteTagline:   "an open-city street racer on s&box",
 		SessionTTL:    time.Hour,
 		LoginMaxFails: 3,
 		LoginLockout:  15 * time.Minute,
@@ -262,8 +264,30 @@ func TestSiteShowsPublishedPostsOnly(t *testing.T) {
 	if strings.Contains(body, "Secret plans") {
 		t.Errorf("draft leaked onto the public site")
 	}
-	if !strings.Contains(body, "HALOGEN") {
+	if !strings.Contains(body, "Backfire") {
 		t.Errorf("site chrome missing — this is the cover story, it has to look like a real site")
+	}
+}
+
+// The brand comes from configuration: the site is only a believable cover while
+// its name matches the domain it is served from.
+func TestSiteBrandComesFromConfig(t *testing.T) {
+	srv, _ := newTestServerWith(t, func(c *config.Config) {
+		c.SiteName = "Nitro"
+		c.SiteTagline = "a demolition derby on s&box"
+	})
+
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/", nil))
+	body := rr.Body.String()
+
+	for _, want := range []string{"Nitro", "a demolition derby on s&amp;box", "<title>Nitro — "} {
+		if !strings.Contains(body, want) {
+			t.Errorf("page missing %q", want)
+		}
+	}
+	if strings.Contains(body, "Backfire") {
+		t.Errorf("default brand leaked into a configured site")
 	}
 }
 

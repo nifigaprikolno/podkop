@@ -6,7 +6,7 @@
 <style>{{.Styles}}</style>
 </head><body>
 <header class="topbar"><div class="wrap">
-  <a class="brand" href="/"><b>HALOGEN</b><span>an open-city street racer on s&amp;box</span></a>
+  <a class="brand" href="/"><b>{{.Name}}</b><span>{{.Tagline}}</span></a>
   <nav class="topnav">
     <a href="/#devlog">Log</a>
     <a href="/#roadmap">Roadmap</a>
@@ -17,8 +17,8 @@
 
 {{define "site-foot"}}
 <footer><div class="wrap">
-  <span>Halogen — a hobby project. Built on s&amp;box, no release date, no promises.</span>
-  <span>Made in a garage</span>
+  <span>{{.Name}} — a hobby project. Built on s&amp;box, no release date, no promises.</span>
+  <span>UI on Halogen</span>
 </div></footer>
 </body></html>
 {{end}}
@@ -80,6 +80,7 @@
     <p class="section-note">Current state of the build, honestly.</p>
     <div class="cards">
       <div class="card"><h3>s&amp;box</h3><p>Razor UI ported from the HTML mockups: splash, lobby, pause, HUD, tuning.</p></div>
+      <div class="card done"><h3>Halogen</h3><p>The interface layer, pulled out into its own library: panels, the seven-segment readouts, the whole dark language. Reused outside the game already.</p></div>
       <div class="card"><h3>One car</h3><p>A hatchback with a real gearbox, turbo curve and nitrous.</p></div>
       <div class="card"><h3>One scene</h3><p>The garage. The city exists as a whitebox and nothing more.</p></div>
     </div>
