@@ -1,9 +1,0 @@
-# Secrets and local deploy artifacts
-deploy/.env
-deploy/certs/
-# Build output
-/podkop-server
-*.exe
-# Local store
-*.json.tmp
-store.json
